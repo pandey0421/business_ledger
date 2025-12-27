@@ -34,15 +34,10 @@ const CustomerLedger = ({ customer, onBack }) => {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      let runningBalance = 0;
-      let saleSum = 0;
-      let paymentSum = 0;
-
-      let data = snapshot.docs.map((d) => {
+      // Step 1: Calculate balances CHRONOLOGICALLY (oldest first)
+      let chronoData = snapshot.docs.map((d) => {
         const raw = d.data();
         const amt = Number(raw.amount) || 0;
-
-        // running balance will be recomputed after we sort, so just store raw now
         return {
           id: d.id,
           ...raw,
@@ -50,38 +45,39 @@ const CustomerLedger = ({ customer, onBack }) => {
         };
       });
 
-      // Sort by date descending, then by createdAt descending
-      data.sort((a, b) => {
+      // Sort chronologically for CORRECT balance calculation (oldest first)
+      chronoData.sort((a, b) => {
         const da = a.date || "";
         const dbDate = b.date || "";
-
-        if (da < dbDate) return 1;
-        if (da > dbDate) return -1;
-
+        if (da !== dbDate) return da.localeCompare(dbDate);
         const ca = a.createdAt?.seconds || 0;
         const cb = b.createdAt?.seconds || 0;
-        if (ca < cb) return 1;
-        if (ca > cb) return -1;
-        return 0;
+        return ca - cb;
       });
 
-      // Recompute running balance, total sale/payment in this new order
-      data = data.map((raw) => {
-        const amt = raw.amount;
-        if (raw.type === "sale") {
+      // Calculate running balances in chronological order
+      let runningBalance = 0;
+      let saleSum = 0;
+      let paymentSum = 0;
+      chronoData = chronoData.map((entry) => {
+        const amt = entry.amount;
+        if (entry.type === "sale") {
           runningBalance += amt;
           saleSum += amt;
-        } else if (raw.type === "payment") {
+        } else if (entry.type === "payment") {
           runningBalance -= amt;
           paymentSum += amt;
         }
         return {
-          ...raw,
+          ...entry,
           runningBalance,
         };
       });
 
-      setEntries(data);
+      // Step 2: Reverse for display (newest first) - balances stay correct
+      const displayData = [...chronoData].reverse();
+      
+      setEntries(displayData);
       setTotalSale(saleSum);
       setTotalPayment(paymentSum);
       setLoading(false);
@@ -485,3 +481,4 @@ const CustomerLedger = ({ customer, onBack }) => {
 };
 
 export default CustomerLedger;
+
