@@ -10,6 +10,13 @@ function Suppliers({ goBack }) {
   const [suppliers, setSuppliers] = useState([]);
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [editingSupplier, setEditingSupplier] = useState(null);
+  const [loadingStats, setLoadingStats] = useState(true);
+  const [overallStats, setOverallStats] = useState({
+    totalPurchases: 0,
+    totalPayments: 0,
+    totalBalance: 0,
+    totalSuppliers: 0
+  });
 
   const userId = auth.currentUser?.uid;
   const supplierRef = userId ? collection(db, 'users', userId, 'suppliers') : null;
@@ -18,10 +25,10 @@ function Suppliers({ goBack }) {
     if (!supplierRef) return;
     try {
       const snapshot = await getDocs(supplierRef);
-      const data = snapshot.docs.map(doc => ({ 
-        id: doc.id, 
+      const data = snapshot.docs.map(doc => ({
+        id: doc.id,
         ...doc.data(),
-        userId // Add userId for ledger access
+        userId
       }));
       setSuppliers(data);
     } catch (err) {
@@ -30,9 +37,65 @@ function Suppliers({ goBack }) {
     }
   };
 
+  const fetchOverallStats = async () => {
+    if (!supplierRef || !userId) {
+      setLoadingStats(false);
+      return;
+    }
+
+    setLoadingStats(true);
+    try {
+      const snapshot = await getDocs(supplierRef);
+      const suppliersData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+
+      let totalPurchases = 0;
+      let totalPayments = 0;
+
+      // FIXED: Use the SAME path as your ledger components (existing data location)
+      for (const supplier of suppliersData) {
+        const ledgerRef = collection(db, 'suppliers', supplier.id, 'ledger'); // ✅ Matches existing data
+        const ledgerSnapshot = await getDocs(ledgerRef);
+        
+        let supplierPurchases = 0;
+        let supplierPayments = 0;
+        
+        ledgerSnapshot.docs.forEach(ledgerDoc => {
+          const data = ledgerDoc.data();
+          if (data.type === 'purchase') supplierPurchases += Number(data.amount) || 0;
+          if (data.type === 'payment') supplierPayments += Number(data.amount) || 0;
+        });
+        
+        totalPurchases += supplierPurchases;
+        totalPayments += supplierPayments;
+      }
+
+      setOverallStats({
+        totalPurchases: Math.max(0, totalPurchases),
+        totalPayments: Math.max(0, totalPayments),
+        totalBalance: Math.max(0, totalPurchases - totalPayments),
+        totalSuppliers: suppliersData.length
+      });
+    } catch (err) {
+      console.error('Failed to fetch overall stats:', err);
+    } finally {
+      setLoadingStats(false);
+    }
+  };
+
   useEffect(() => {
     fetchSuppliers();
-  }, [userId, supplierRef]);
+    fetchOverallStats();
+  }, [userId]);
+
+  // Refresh stats when suppliers change
+  useEffect(() => {
+    if (suppliers.length > 0) {
+      fetchOverallStats();
+    }
+  }, [suppliers]);
 
   const handleAddSupplier = async () => {
     if (!name.trim()) {
@@ -84,12 +147,21 @@ function Suppliers({ goBack }) {
   const handleDeleteSupplier = async (supplierId) => {
     if (!window.confirm('Are you sure you want to delete this supplier and all their ledger entries?')) return;
     try {
-      // Delete ledger entries first
-      const ledgerRef = collection(db, 'users', userId, 'suppliers', supplierId, 'ledger');
-      const ledgerSnapshot = await getDocs(ledgerRef);
-      for (const ledgerDoc of ledgerSnapshot.docs) {
+      // FIXED: Delete from existing ledger path too
+      const userLedgerRef = collection(db, 'users', userId, 'suppliers', supplierId, 'ledger');
+      const globalLedgerRef = collection(db, 'suppliers', supplierId, 'ledger');
+      
+      // Delete from both locations to be safe
+      const userLedgerSnapshot = await getDocs(userLedgerRef);
+      for (const ledgerDoc of userLedgerSnapshot.docs) {
         await deleteDoc(doc(db, 'users', userId, 'suppliers', supplierId, 'ledger', ledgerDoc.id));
       }
+      
+      const globalLedgerSnapshot = await getDocs(globalLedgerRef);
+      for (const ledgerDoc of globalLedgerSnapshot.docs) {
+        await deleteDoc(doc(db, 'suppliers', supplierId, 'ledger', ledgerDoc.id));
+      }
+      
       // Delete supplier
       await deleteDoc(doc(db, 'users', userId, 'suppliers', supplierId));
       setMessage('Supplier deleted successfully');
@@ -106,64 +178,122 @@ function Suppliers({ goBack }) {
     setPhone(supplier.phone || '');
   };
 
+  const formatAmount = (num) => {
+    return new Intl.NumberFormat("en-IN").format(Math.round(num));
+  };
+
   if (selectedSupplier) {
-    return <SupplierLedger supplier={selectedSupplier} onBack={() => setSelectedSupplier(null)} />;
+    return (
+      <SupplierLedger
+        supplier={selectedSupplier}
+        onBack={() => setSelectedSupplier(null)}
+      />
+    );
   }
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'linear-gradient(135deg, #fff8e1, #e3f2fd)',
-      padding: '24px'
-    }}>
-      <div style={{
-        maxWidth: '800px',
-        margin: '0 auto',
-        backgroundColor: '#ffffff',
-        borderRadius: '12px',
-        padding: '24px',
-        boxShadow: '0 6px 18px rgba(0,0,0,0.06)',
-        border: '1px solid #e0e0e0'
-      }}>
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center', 
-          marginBottom: '16px' 
-        }}>
-          <div>
-            <h2 style={{ margin: '0', color: '#ef6c00' }}>Suppliers</h2>
-            <p style={{ marginTop: '4px', color: '#607d8b' }}>
-              Add new suppliers and tap a card to view their ledger.
-            </p>
-          </div>
-          <button onClick={goBack} style={{
-            padding: '6px 12px',
-            borderRadius: '999px',
-            border: '1px solid #cfd8dc',
-            backgroundColor: '#fafafa',
-            cursor: 'pointer'
-          }}>
-            ← Back
-          </button>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "linear-gradient(135deg, #fff3e0, #fce4ec)",
+        padding: "24px",
+      }}
+    >
+      <div
+        style={{
+          maxWidth: "900px",
+          margin: "0 auto",
+          backgroundColor: "#ffffff",
+          borderRadius: "12px",
+          padding: "24px",
+          boxShadow: "0 6px 18px rgba(0,0,0,0.06)",
+          border: "1px solid #e0e0e0",
+        }}
+      >
+        <button
+          onClick={goBack}
+          style={{
+            marginBottom: "12px",
+            padding: "6px 12px",
+            borderRadius: "999px",
+            border: "1px solid #cfd8dc",
+            backgroundColor: "#fafafa",
+            cursor: "pointer",
+          }}
+        >
+          ← Back
+        </button>
+
+        <h1 style={{ marginTop: "0", color: "#1a237e", fontSize: "28px" }}>
+          Suppliers
+        </h1>
+        <p style={{ color: "#546e7a", marginBottom: "24px" }}>
+          Add new suppliers and tap a card to view their ledger.
+        </p>
+
+        {/* Overall Stats Card */}
+        <div
+          style={{
+            marginBottom: "24px",
+            padding: "20px",
+            background: "linear-gradient(135deg, #fff3e0, #ffe0b2)",
+            borderRadius: "12px",
+            border: "2px solid #fb8c00",
+            boxShadow: "0 4px 12px rgba(251, 140, 0, 0.15)",
+          }}
+        >
+          <h3 style={{ margin: "0 0 12px 0", color: "#ef6c00", fontSize: "20px" }}>
+            📊 Overall Suppliers Summary
+          </h3>
+          {loadingStats ? (
+            <p style={{ color: "#fb8c00", margin: 0 }}>Loading stats...</p>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr)", gap: "12px" }}>
+              <div>
+                <div style={{ fontSize: "24px", fontWeight: "700", color: "#2e7d32", marginBottom: "4px" }}>
+                  Rs. {formatAmount(overallStats.totalPurchases)}
+                </div>
+                <div style={{ color: "#4caf50", fontSize: "14px" }}>Total Purchases</div>
+              </div>
+              <div>
+                <div style={{ fontSize: "24px", fontWeight: "700", color: "#c62828", marginBottom: "4px" }}>
+                  Rs. {formatAmount(overallStats.totalPayments)}
+                </div>
+                <div style={{ color: "#d32f2f", fontSize: "14px" }}>Total Payments</div>
+              </div>
+              <div>
+                <div style={{ fontSize: "24px", fontWeight: "700", color: "#1976d2", marginBottom: "4px" }}>
+                  Rs. {formatAmount(overallStats.totalBalance)}
+                </div>
+                <div style={{ color: "#1e88e5", fontSize: "14px" }}>Remaining Balance</div>
+              </div>
+              <div>
+                <div style={{ fontSize: "24px", fontWeight: "700", color: "#424242", marginBottom: "4px" }}>
+                  {overallStats.totalSuppliers}
+                </div>
+                <div style={{ color: "#757575", fontSize: "14px" }}>Total Suppliers</div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Add/Edit Form */}
-        <div style={{ 
-          display: 'flex', 
-          gap: '16px', 
-          flexWrap: 'wrap', 
-          marginBottom: '16px',
-          backgroundColor: '#fff3e0',
-          padding: '16px',
-          borderRadius: '10px'
-        }}>
-          <div style={{ flex: '1 1 220px', minWidth: '220px' }}>
-            <label style={{ fontSize: '14px', color: '#455a64', fontWeight: '500' }}>
-              Supplier Name <span style={{ color: '#d32f2f' }}>*</span>
-            </label><br />
+        <div
+          style={{
+            display: "flex",
+            gap: "12px",
+            flexWrap: "wrap",
+            marginBottom: "24px",
+            backgroundColor: "#f5f5f5",
+            padding: "20px",
+            borderRadius: "12px",
+          }}
+        >
+          <div style={{ flex: "1", minWidth: "200px" }}>
+            <label style={{ display: "block", marginBottom: "4px", fontWeight: "500", color: "#37474f" }}>
+              Supplier Name *
+            </label>
             <input
-              type="text"
               value={editingSupplier ? editingSupplier.name : name}
               onChange={(e) => {
                 if (editingSupplier) {
@@ -174,24 +304,21 @@ function Suppliers({ goBack }) {
               }}
               placeholder="Enter supplier name"
               style={{
-                marginTop: '4px',
-                width: '100%',
-                padding: '10px 12px',
-                borderRadius: '8px',
+                width: "100%",
+                padding: "10px 12px",
+                borderRadius: "8px",
                 border: editingSupplier && !editingSupplier.name.trim() ? '2px solid #ef5350' : '1px solid #cfd8dc',
                 outline: 'none',
-                fontSize: '14px'
+                fontSize: "14px"
               }}
             />
           </div>
-          
-          <div style={{ flex: '1 1 220px', minWidth: '220px' }}>
-            <label style={{ fontSize: '14px', color: '#455a64', fontWeight: '500' }}>
+          <div style={{ flex: "1", minWidth: "200px" }}>
+            <label style={{ display: "block", marginBottom: "4px", fontWeight: "500", color: "#37474f" }}>
               Phone (optional)
-            </label><br />
+            </label>
             <input
-              type="text"
-              value={editingSupplier ? editingSupplier.phone : phone}
+              value={editingSupplier ? editingSupplier.phone || '' : phone}
               onChange={(e) => {
                 if (editingSupplier) {
                   setEditingSupplier({ ...editingSupplier, phone: e.target.value });
@@ -201,122 +328,120 @@ function Suppliers({ goBack }) {
               }}
               placeholder="Enter phone number"
               style={{
-                marginTop: '4px',
-                width: '100%',
-                padding: '10px 12px',
-                borderRadius: '8px',
+                width: "100%",
+                padding: "10px 12px",
+                borderRadius: "8px",
                 border: '1px solid #cfd8dc',
                 outline: 'none',
-                fontSize: '14px'
+                fontSize: "14px"
               }}
             />
           </div>
-          
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', flexWrap: 'wrap' }}>
-            {editingSupplier ? (
-              <>
-                <button 
-                  onClick={() => handleUpdateSupplier(editingSupplier.id)}
-                  disabled={!editingSupplier.name.trim()}
-                  style={{
-                    padding: '10px 16px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    backgroundColor: editingSupplier.name.trim() ? '#fb8c00' : '#bdbdbd',
-                    color: '#fff',
-                    cursor: editingSupplier.name.trim() ? 'pointer' : 'not-allowed',
-                    fontWeight: '500',
-                    fontSize: '14px'
-                  }}
-                >
-                  Update Supplier
-                </button>
-                <button 
-                  onClick={() => {
-                    setEditingSupplier(null);
-                    setName('');
-                    setPhone('');
-                  }}
-                  style={{
-                    padding: '10px 16px',
-                    borderRadius: '8px',
-                    border: '1px solid #cfd8dc',
-                    backgroundColor: '#fafafa',
-                    color: '#607d8b',
-                    cursor: 'pointer',
-                    fontSize: '14px'
-                  }}
-                >
-                  Cancel
-                </button>
-              </>
-            ) : (
-              <button 
-                onClick={handleAddSupplier}
-                disabled={!name.trim()}
+          {editingSupplier ? (
+            <>
+              <button
+                onClick={() => handleUpdateSupplier(editingSupplier.id)}
+                disabled={!editingSupplier.name.trim()}
                 style={{
-                  padding: '10px 16px',
-                  borderRadius: '8px',
+                  padding: "10px 16px",
+                  borderRadius: "8px",
                   border: 'none',
-                  backgroundColor: name.trim() ? '#fb8c00' : '#bdbdbd',
+                  backgroundColor: editingSupplier.name.trim() ? '#fb8c00' : '#bdbdbd',
                   color: '#fff',
-                  cursor: name.trim() ? 'pointer' : 'not-allowed',
+                  cursor: editingSupplier.name.trim() ? 'pointer' : 'not-allowed',
                   fontWeight: '500',
+                  fontSize: '14px',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                Update Supplier
+              </button>
+              <button
+                onClick={() => {
+                  setEditingSupplier(null);
+                  setName('');
+                  setPhone('');
+                }}
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: "8px",
+                  border: '1px solid #cfd8dc',
+                  backgroundColor: '#fafafa',
+                  color: '#607d8b',
+                  cursor: 'pointer',
                   fontSize: '14px'
                 }}
               >
-                Add Supplier
+                Cancel
               </button>
-            )}
-          </div>
+            </>
+          ) : (
+            <button
+              onClick={handleAddSupplier}
+              disabled={!name.trim()}
+              style={{
+                padding: "10px 16px",
+                borderRadius: "8px",
+                border: 'none',
+                backgroundColor: name.trim() ? '#fb8c00' : '#bdbdbd',
+                color: '#fff',
+                cursor: name.trim() ? 'pointer' : 'not-allowed',
+                fontWeight: '500',
+                fontSize: '14px',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              Add Supplier
+            </button>
+          )}
         </div>
 
         {/* Messages */}
         {message && (
-          <div style={{
-            marginBottom: '16px',
-            padding: '12px 16px',
-            borderRadius: '8px',
-            fontSize: '14px',
-            fontWeight: '500'
-          }}>
-            <span style={{
-              color: message.toLowerCase().includes('error') || message.toLowerCase().includes('failed') ? '#d32f2f' : '#ef6c00',
-              backgroundColor: message.toLowerCase().includes('error') || message.toLowerCase().includes('failed') ? '#ffebee' : '#fff3e0'
-            }}>
-              {message}
-            </span>
+          <div
+            style={{
+              marginBottom: "16px",
+              padding: "12px",
+              borderRadius: "8px",
+              backgroundColor: "#fff3e0",
+              color: "#ef6c00",
+              fontSize: "14px",
+            }}
+          >
+            {message}
           </div>
         )}
 
         {/* Supplier List */}
-        <h3 style={{ marginTop: '12px', color: '#37474f', fontSize: '18px' }}>
+        <h3 style={{ marginBottom: "16px", color: "#1a237e" }}>
           Supplier List ({suppliers.length})
         </h3>
-        
         {suppliers.length === 0 ? (
-          <p style={{ color: '#78909c', fontStyle: 'italic', textAlign: 'center', padding: '40px' }}>
+          <div
+            style={{
+              padding: "40px 20px",
+              textAlign: "center",
+              color: "#78909c",
+              backgroundColor: "#fafafa",
+              borderRadius: "12px",
+              border: "1px dashed #cfd8dc"
+            }}
+          >
             No suppliers yet. Add your first supplier above.
-          </p>
+          </div>
         ) : (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-            gap: '16px',
-            marginTop: '16px'
-          }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "16px" }}>
             {suppliers.map((s) => (
-              <div 
-                key={s.id} 
+              <div
+                key={s.id}
                 style={{
-                  padding: '16px',
-                  borderRadius: '12px',
-                  border: '1px solid #ffe0b2',
-                  background: 'linear-gradient(135deg, #fff3e0, #fff8e1)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  position: 'relative',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+                  borderRadius: "12px",
+                  padding: "20px",
+                  backgroundColor: "#f8f9fa",
+                  border: "1px solid #e0e0e0",
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.08)"
                 }}
                 onClick={() => setSelectedSupplier({ ...s, userId })}
                 onMouseEnter={(e) => {
@@ -328,53 +453,31 @@ function Suppliers({ goBack }) {
                   e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
                 }}
               >
-                {/* Supplier Info */}
-                <div style={{ marginBottom: '12px' }}>
-                  <div style={{ 
-                    fontWeight: '600', 
-                    color: '#ef6c00', 
-                    fontSize: '16px',
-                    marginBottom: '4px'
-                  }}>
-                    {s.name}
-                  </div>
-                  {s.phone && (
-                    <div style={{ 
-                      fontSize: '14px', 
-                      color: '#607d8b',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px'
-                    }}>
-                      📞 {s.phone}
-                    </div>
-                  )}
+                <div style={{ fontSize: "18px", fontWeight: "600", color: "#ef6c00", marginBottom: "8px" }}>
+                  {s.name}
                 </div>
-
-                {/* Action Buttons - Absolute positioned */}
-                <div style={{
-                  position: 'absolute',
-                  top: '12px',
-                  right: '12px',
-                  display: 'flex',
-                  gap: '6px'
-                }}>
-                  <button 
+                {s.phone && (
+                  <div style={{ color: "#546e7a", fontSize: "14px", marginBottom: "12px" }}>
+                    📞 {s.phone}
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <button
                     onClick={(e) => {
                       e.stopPropagation();
                       startEditSupplier(s);
                     }}
                     title="Edit Supplier"
                     style={{
-                      padding: '6px 10px',
-                      borderRadius: '6px',
-                      border: '1px solid #42a5f5',
-                      backgroundColor: '#e3f2fd',
-                      color: '#1976d2',
-                      fontSize: '12px',
-                      fontWeight: '500',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s'
+                      padding: "6px 10px",
+                      borderRadius: "6px",
+                      border: "1px solid #42a5f5",
+                      backgroundColor: "#e3f2fd",
+                      color: "#1976d2",
+                      fontSize: "12px",
+                      fontWeight: "500",
+                      cursor: "pointer",
+                      transition: "all 0.2s"
                     }}
                     onMouseEnter={(e) => {
                       e.target.style.backgroundColor = '#bbdefb';
@@ -385,22 +488,22 @@ function Suppliers({ goBack }) {
                   >
                     ✏️ Edit
                   </button>
-                  <button 
+                  <button
                     onClick={(e) => {
                       e.stopPropagation();
                       handleDeleteSupplier(s.id);
                     }}
                     title="Delete Supplier"
                     style={{
-                      padding: '6px 10px',
-                      borderRadius: '6px',
-                      border: '1px solid #ef5350',
-                      backgroundColor: '#ffebee',
-                      color: '#d32f2f',
-                      fontSize: '12px',
-                      fontWeight: '500',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s'
+                      padding: "6px 10px",
+                      borderRadius: "6px",
+                      border: "1px solid #ef5350",
+                      backgroundColor: "#ffebee",
+                      color: "#d32f2f",
+                      fontSize: "12px",
+                      fontWeight: "500",
+                      cursor: "pointer",
+                      transition: "all 0.2s"
                     }}
                     onMouseEnter={(e) => {
                       e.target.style.backgroundColor = '#ffcdd2';
@@ -412,17 +515,7 @@ function Suppliers({ goBack }) {
                     🗑️ Delete
                   </button>
                 </div>
-
-                {/* View Ledger Button */}
-                <div style={{
-                  marginTop: '12px',
-                  padding: '8px 12px',
-                  backgroundColor: 'rgba(251,140,0,0.1)',
-                  borderRadius: '6px',
-                  textAlign: 'center',
-                  fontSize: '13px',
-                  color: '#ef6c00'
-                }}>
+                <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #e0e0e0", fontSize: "12px", color: "#9e9e9e" }}>
                   👁️ Click card to view ledger
                 </div>
               </div>
@@ -435,4 +528,3 @@ function Suppliers({ goBack }) {
 }
 
 export default Suppliers;
-
