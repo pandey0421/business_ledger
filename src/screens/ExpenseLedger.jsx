@@ -12,17 +12,40 @@ const ExpenseLedger = ({ expense, onBack }) => {
   const [editingEntry, setEditingEntry] = useState(null);
   const [message, setMessage] = useState('');
 
+  // Auto-format date input: 20250715 -> 2025-07-15
+  const handleDateChange = (e) => {
+    let value = e.target.value.replace(/[^0-9]/g, ''); // Only numbers
+    
+    // Auto-format: after 4 digits (year) add -, after 6 digits (year+month) add -
+    if (value.length >= 4) {
+      value = value.slice(0, 4) + '-' + value.slice(4);
+    }
+    if (value.length >= 7) {
+      value = value.slice(0, 7) + '-' + value.slice(7);
+    }
+    
+    setDate(value);
+  };
+
   useEffect(() => {
     if (!expense?.id) return;
 
     // Real-time listener ordered by createdAt
-    const q = query(collection(db, 'expenses', expense.id, 'ledger'), orderBy('createdAt', 'asc'));
+    const q = query(
+      collection(db, 'expenses', expense.id, 'ledger'), 
+      orderBy('createdAt', 'asc')
+    );
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
       // Step 1: Calculate chronologically (oldest first) for correct running totals
       let chronoData = snapshot.docs.map(d => {
         const raw = d.data();
         const amt = Number(raw.amount) || 0;
-        return { id: d.id, ...raw, amount: amt };
+        return {
+          id: d.id,
+          ...raw,
+          amount: amt
+        };
       });
 
       // Sort chronologically for balance calculation
@@ -43,12 +66,14 @@ const ExpenseLedger = ({ expense, onBack }) => {
       chronoData = chronoData.map(entry => {
         runningTotal += entry.amount;
         expenseSum += entry.amount;
-        return { ...entry, runningTotal };
+        return {
+          ...entry,
+          runningTotal
+        };
       });
 
       // Reverse for display (newest first, totals remain correct)
       const displayData = [...chronoData].reverse();
-      
       setEntries(displayData);
       setTotalExpenses(expenseSum);
       setLoading(false);
@@ -69,7 +94,7 @@ const ExpenseLedger = ({ expense, onBack }) => {
       setMessage('Amount and date are required');
       return;
     }
-    
+
     // Simple yyyy-mm-dd validation
     const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
     if (!dateRegex.test(date)) {
@@ -80,20 +105,26 @@ const ExpenseLedger = ({ expense, onBack }) => {
     try {
       if (editingEntry) {
         // Update existing entry
-        await updateDoc(doc(db, 'expenses', expense.id, 'ledger', editingEntry.id), {
-          amount: Number(amount),
-          date,
-          note
-        });
+        await updateDoc(
+          doc(db, 'expenses', expense.id, 'ledger', editingEntry.id),
+          {
+            amount: Number(amount),
+            date,
+            note
+          }
+        );
         setMessage('Entry updated successfully');
       } else {
         // Add new entry
-        await addDoc(collection(db, 'expenses', expense.id, 'ledger'), {
-          amount: Number(amount),
-          date,
-          note,
-          createdAt: serverTimestamp()
-        });
+        await addDoc(
+          collection(db, 'expenses', expense.id, 'ledger'),
+          {
+            amount: Number(amount),
+            date,
+            note,
+            createdAt: serverTimestamp()
+          }
+        );
         setMessage('Entry added successfully');
       }
       resetForm();
@@ -112,6 +143,7 @@ const ExpenseLedger = ({ expense, onBack }) => {
 
   const handleDeleteEntry = async (entryId) => {
     if (!window.confirm('Are you sure you want to delete this entry?')) return;
+    
     try {
       await deleteDoc(doc(db, 'expenses', expense.id, 'ledger', entryId));
       setMessage('Entry deleted successfully');
@@ -160,9 +192,6 @@ const ExpenseLedger = ({ expense, onBack }) => {
         <h2 style={{ marginTop: 0, color: '#1a237e', fontSize: '28px' }}>
           Ledger for {expense.name}
         </h2>
-        <p style={{ color: '#546e7a', marginBottom: '16px' }}>
-          
-        </p>
 
         {/* Add/Edit Form */}
         <div style={{ 
@@ -174,9 +203,9 @@ const ExpenseLedger = ({ expense, onBack }) => {
           padding: '12px', 
           borderRadius: '10px' 
         }}>
-          <input 
-            type="number" 
-            placeholder="Amount" 
+          <input
+            type="number"
+            placeholder="Amount"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             style={{ 
@@ -186,12 +215,11 @@ const ExpenseLedger = ({ expense, onBack }) => {
               minWidth: '100px' 
             }}
           />
-          
-          <input 
-            type="text" 
-            placeholder="Date (yyyy-mm-dd)" 
+          <input
+            type="text"
+            placeholder="Date (2082-07-15)"
             value={date}
-            onChange={(e) => setDate(e.target.value)}
+            onChange={handleDateChange}
             style={{ 
               padding: '8px 10px', 
               borderRadius: '8px', 
@@ -199,10 +227,9 @@ const ExpenseLedger = ({ expense, onBack }) => {
               minWidth: '140px' 
             }}
           />
-          
-          <input 
-            type="text" 
-            placeholder="Note (optional)" 
+          <input
+            type="text"
+            placeholder="Note (optional)"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             style={{ 
@@ -213,8 +240,7 @@ const ExpenseLedger = ({ expense, onBack }) => {
               border: '1px solid #cfd8dc' 
             }}
           />
-          
-          <button 
+          <button
             onClick={addOrUpdateEntry}
             style={{ 
               padding: '8px 14px', 
@@ -223,15 +249,14 @@ const ExpenseLedger = ({ expense, onBack }) => {
               backgroundColor: '#f44336', 
               color: '#fff', 
               cursor: 'pointer', 
-              fontWeight: '500', 
+              fontWeight: 500, 
               minWidth: '120px' 
             }}
           >
             {editingEntry ? 'Update Entry' : 'Add Entry'}
           </button>
-          
           {editingEntry && (
-            <button 
+            <button
               onClick={resetForm}
               style={{ 
                 padding: '8px 14px', 
@@ -240,7 +265,7 @@ const ExpenseLedger = ({ expense, onBack }) => {
                 backgroundColor: '#fafafa', 
                 color: '#607d8b', 
                 cursor: 'pointer', 
-                fontWeight: '500', 
+                fontWeight: 500, 
                 minWidth: '80px' 
               }}
             >
@@ -293,7 +318,7 @@ const ExpenseLedger = ({ expense, onBack }) => {
               </tr>
             </thead>
             <tbody>
-              {entries.map(entry => (
+              {entries.map((entry) => (
                 <tr key={entry.id}>
                   <td style={{ border: '1px solid #e0e0e0', padding: '8px', fontSize: '14px' }}>
                     {entry.date}
@@ -302,7 +327,7 @@ const ExpenseLedger = ({ expense, onBack }) => {
                     border: '1px solid #e0e0e0', 
                     padding: '8px', 
                     color: '#d32f2f', 
-                    fontWeight: '600' 
+                    fontWeight: 600 
                   }}>
                     Rs. {formatAmount(entry.amount)}
                   </td>
@@ -322,7 +347,7 @@ const ExpenseLedger = ({ expense, onBack }) => {
                     {entry.note || '-'}
                   </td>
                   <td style={{ border: '1px solid #e0e0e0', padding: '8px' }}>
-                    <button 
+                    <button
                       onClick={() => startEditEntry(entry)}
                       style={{ 
                         marginRight: '4px', 
@@ -337,7 +362,7 @@ const ExpenseLedger = ({ expense, onBack }) => {
                     >
                       Edit
                     </button>
-                    <button 
+                    <button
                       onClick={() => handleDeleteEntry(entry.id)}
                       style={{ 
                         padding: '4px 8px', 
