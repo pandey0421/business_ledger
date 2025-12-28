@@ -161,7 +161,7 @@ const ExpenseLedger = ({ expense, onBack }) => {
           Ledger for {expense.name}
         </h2>
         <p style={{ color: '#546e7a', marginBottom: '16px' }}>
-          Track all expenses for this category. All entries are outflows (positive amounts).
+          
         </p>
 
         {/* Add/Edit Form */}

@@ -200,7 +200,7 @@ const CustomerLedger = ({ customer, onBack }) => {
           Ledger for {customer.name}
         </h2>
         <p style={{ color: "#546e7a", marginBottom: "16px" }}>
-          Track sales and payments. Sales are shown in green, payments in red.
+  
         </p>
 
         {/* Form */}
@@ -481,4 +481,3 @@ const CustomerLedger = ({ customer, onBack }) => {
 };
 
 export default CustomerLedger;
-

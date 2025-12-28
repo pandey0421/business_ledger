@@ -228,7 +228,7 @@ function Customers({ goBack }) {
           Customers
         </h1>
         <p style={{ color: "#546e7a", marginBottom: "24px" }}>
-          Add new customers and tap a card to view their ledger.
+        
         </p>
 
         {/* Overall Stats Card */}

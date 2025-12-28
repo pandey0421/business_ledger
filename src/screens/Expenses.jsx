@@ -178,7 +178,6 @@ function Expenses({ goBack }) {
         </button>
         <h1 style={{ marginTop: 0, color: '#1a237e', fontSize: '28px' }}>Expenses</h1>
         <p style={{ color: '#546e7a', marginBottom: '24px' }}>
-          Add new expense categories and tap a card to view their ledger.
         </p>
 
         {/* Overall Stats Card */}

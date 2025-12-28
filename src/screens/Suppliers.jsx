@@ -228,7 +228,7 @@ function Suppliers({ goBack }) {
           Suppliers
         </h1>
         <p style={{ color: "#546e7a", marginBottom: "24px" }}>
-          Add new suppliers and tap a card to view their ledger.
+      
         </p>
 
         {/* Overall Stats Card */}

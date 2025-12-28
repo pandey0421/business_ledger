@@ -153,7 +153,7 @@ function Dashboard({ onSelect }) {
           >
             <h3 style={{ marginTop: 0, marginBottom: '12px', color: '#1e88e5', fontSize: '20px' }}>Customers</h3>
             <p style={{ fontSize: '14px', color: '#546e7a', marginBottom: '16px' }}>
-              Record sales, track receivables, view customer ledgers
+              
             </p>
             <button style={{ 
               width: '100%', 
@@ -193,7 +193,7 @@ function Dashboard({ onSelect }) {
           >
             <h3 style={{ marginTop: 0, marginBottom: '12px', color: '#ef6c00', fontSize: '20px' }}>Suppliers</h3>
             <p style={{ fontSize: '14px', color: '#546e7a', marginBottom: '16px' }}>
-              Track purchases, payments made, and supplier balances
+             
             </p>
             <button style={{ 
               width: '100%', 
@@ -233,7 +233,7 @@ function Dashboard({ onSelect }) {
           >
             <h3 style={{ marginTop: 0, marginBottom: '12px', color: '#c62828', fontSize: '20px' }}>Expenses</h3>
             <p style={{ fontSize: '14px', color: '#546e7a', marginBottom: '16px' }}>
-              Track rent, salary, materials, and all business expenses
+              
             </p>
             <button style={{ 
               width: '100%', 
