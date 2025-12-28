@@ -4,8 +4,9 @@ import { auth } from "./firebase";
 
 import Login from "./screens/Login";
 import Dashboard from "./screens/Dashboard";
-import Customers from "./screens/Customers"; // we will create this next
-import Suppliers from "./screens/Suppliers"; // we will create this next
+import Customers from "./screens/Customers";
+import Suppliers from "./screens/Suppliers";
+import Expenses from "./screens/Expenses"; // ADD THIS LINE
 
 function App() {
   const [user, setUser] = useState(null);
@@ -34,8 +35,10 @@ function App() {
   if (screen === "suppliers")
     return <Suppliers goBack={() => setScreen("dashboard")} />;
 
+  if (screen === "expenses") // ADD THIS BLOCK
+    return <Expenses goBack={() => setScreen("dashboard")} />;
+
   return <p>Unknown screen</p>;
 }
 
 export default App;
-
