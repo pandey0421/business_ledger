@@ -89,12 +89,12 @@ const Login = ({ onSuccess }) => {
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
           <h2 style={{ marginBottom: '8px', color: '#1a237e', fontSize: '28px', fontWeight: 'bold' }}>
-            {showSignup ? 'Create Account' : 'Account Login'}
+            {showSignup ? 'Create Account' : 'Karobar Khata'}
           </h2>
           <p style={{ margin: 0, color: '#607d8b', fontSize: '16px' }}>
             {showSignup 
               ? 'Create your account to manage customers and ledgers.' 
-              : 'Sign in to manage your customers and ledgers.'
+              : 'Sign in to you Karobar Khata account.'
             }
           </p>
         </div>

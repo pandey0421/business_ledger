@@ -108,7 +108,7 @@ function Dashboard({ onSelect }) {
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <div>
-            <h2 style={{ margin: 0, color: '#1b5e20', fontSize: '28px' }}>Business Dashboard</h2>
+            <h2 style={{ margin: 0, color: '#1b5e20', fontSize: '28px' }}>Karobar Khata</h2>
             <p style={{ marginTop: '4px', color: '#607d8b', fontSize: '16px' }}>Real-time overview of your accounts</p>
           </div>
           <button 
