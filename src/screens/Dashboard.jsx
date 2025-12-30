@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../firebase';
 import { collection, getDocs } from 'firebase/firestore';
+import './styles/ResponsiveStyles.css'; // Add responsive CSS
 
 function Dashboard({ onSelect }) {
   const [stats, setStats] = useState({
@@ -13,6 +14,7 @@ function Dashboard({ onSelect }) {
     totalExpenseCategories: 0
   });
   const [loading, setLoading] = useState(true);
+  
   const userId = auth.currentUser?.uid;
 
   const fetchStats = async () => {
@@ -22,7 +24,10 @@ function Dashboard({ onSelect }) {
       // Fetch customer stats
       const customersRef = collection(db, 'users', userId, 'customers');
       const customersSnapshot = await getDocs(customersRef);
-      const customers = customersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const customers = customersSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
       let totalReceivables = 0;
       for (const customer of customers) {
         const ledgerRef = collection(db, 'customers', customer.id, 'ledger');
@@ -40,7 +45,10 @@ function Dashboard({ onSelect }) {
       // Fetch supplier stats
       const suppliersRef = collection(db, 'users', userId, 'suppliers');
       const suppliersSnapshot = await getDocs(suppliersRef);
-      const suppliers = suppliersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const suppliers = suppliersSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
       let totalPayables = 0;
       for (const supplier of suppliers) {
         const ledgerRef = collection(db, 'suppliers', supplier.id, 'ledger');
@@ -58,7 +66,10 @@ function Dashboard({ onSelect }) {
       // Fetch expenses stats
       const expensesRef = collection(db, 'users', userId, 'expenses');
       const expensesSnapshot = await getDocs(expensesRef);
-      const expenses = expensesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const expenses = expensesSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
       let totalExpenses = 0;
       for (const expense of expenses) {
         const ledgerRef = collection(db, 'expenses', expense.id, 'ledger');
@@ -103,148 +114,192 @@ function Dashboard({ onSelect }) {
   const netProfit = stats.totalReceivables - stats.totalPayables - stats.totalExpenses;
 
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #f1f8e9, #e3f2fd)', padding: '24px' }}>
-      <div style={{ maxWidth: '1200px', margin: '0 auto', backgroundColor: '#ffffff', borderRadius: '12px', padding: '24px', boxShadow: '0 6px 18px rgba(0,0,0,0.06)', border: '1px solid #e0e0e0' }}>
+    <div className="responsive-container" style={{ 
+      background: 'linear-gradient(135deg, #f1f8e9, #e3f2fd)' 
+    }}>
+      <div className="responsive-card" style={{
+        backgroundColor: 'ffffff',
+        borderRadius: '12px',
+        boxShadow: '0 6px 18px rgba(0,0,0,0.06)',
+        border: '1px solid #e0e0e0'
+      }}>
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <div className="responsive-flex" style={{
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '24px'
+        }}>
           <div>
-            <h2 style={{ margin: 0, color: '#1b5e20', fontSize: '28px' }}>Karobar Khata</h2>
-            <p style={{ marginTop: '4px', color: '#607d8b', fontSize: '16px' }}>Real-time overview of your accounts</p>
+            <h2 style={{
+              margin: 0,
+              color: '#1b5e20',
+              fontSize: '28px'
+            }}>
+              Karobar Khata
+            </h2>
+            <p style={{
+              marginTop: '4px',
+              color: '#607d8b',
+              fontSize: '16px'
+            }}>
+              Real-time overview of your accounts
+            </p>
           </div>
-          <button 
-            onClick={handleLogout}
-            style={{ 
-              padding: '10px 16px', 
-              borderRadius: '999px', 
-              border: '1px solid #ef9a9a', 
-              backgroundColor: '#ffebee', 
-              color: '#c62828', 
-              cursor: 'pointer', 
-              fontSize: '14px', 
-              fontWeight: '500' 
-            }}
-          >
+          <button onClick={handleLogout} style={{
+            padding: '10px 16px',
+            borderRadius: '999px',
+            border: '1px solid #ef9a9a',
+            backgroundColor: '#ffebee',
+            color: '#c62828',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: '500'
+          }}>
             Logout
           </button>
         </div>
 
         {/* Action Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+        <div className="responsive-grid" style={{ marginBottom: '32px' }}>
           {/* Customers Card */}
-          <div 
-            style={{ 
-              background: 'linear-gradient(135deg, #e3f2fd, #e8eaf6)', 
-              borderRadius: '12px', 
-              padding: '20px', 
-              boxShadow: '0 4px 12px rgba(0,0,0,0.08)', 
-              border: '1px solid #bbdefb', 
-              cursor: 'pointer', 
-              transition: 'transform 0.2s, box-shadow 0.2s' 
-            }}
-            onClick={() => onSelect('customers')}
-            onMouseEnter={(e) => {
-              e.target.style.transform = 'translateY(-2px)';
-              e.target.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.transform = 'none';
-              e.target.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
-            }}
-          >
-            <h3 style={{ marginTop: 0, marginBottom: '12px', color: '#1e88e5', fontSize: '20px' }}>Customers</h3>
-            <p style={{ fontSize: '14px', color: '#546e7a', marginBottom: '16px' }}>
-              
+          <div className="responsive-card" style={{
+            background: 'linear-gradient(135deg, #e3f2fd, #e8eaf6)',
+            borderRadius: '12px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+            border: '1px solid #bbdefb',
+            cursor: 'pointer',
+            transition: 'transform 0.2s, box-shadow 0.2s'
+          }}
+          onClick={() => onSelect('customers')}
+          onMouseEnter={(e) => {
+            e.target.style.transform = 'translateY(-2px)';
+            e.target.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.transform = 'none';
+            e.target.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+          }}>
+            <h3 style={{
+              marginTop: 0,
+              marginBottom: '12px',
+              color: '#1e88e5',
+              fontSize: '20px'
+            }}>
+              Customers
+            </h3>
+            <p style={{
+              fontSize: '14px',
+              color: '#546e7a',
+              marginBottom: '16px'
+            }}>
+              Manage sales and receivables
             </p>
-            <button style={{ 
-              width: '100%', 
-              padding: '10px 16px', 
-              borderRadius: '8px', 
-              border: 'none', 
-              backgroundColor: '#42a5f5', 
-              color: '#fff', 
-              fontWeight: '600', 
-              cursor: 'pointer', 
-              fontSize: '14px' 
+            <button style={{
+              width: '100%',
+              padding: '10px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              backgroundColor: '#42a5f5',
+              color: '#fff',
+              fontWeight: '600',
+              cursor: 'pointer',
+              fontSize: '14px'
             }}>
               Open Customers
             </button>
           </div>
 
           {/* Suppliers Card */}
-          <div 
-            style={{ 
-              background: 'linear-gradient(135deg, #fff3e0, #fff8e1)', 
-              borderRadius: '12px', 
-              padding: '20px', 
-              boxShadow: '0 4px 12px rgba(0,0,0,0.08)', 
-              border: '1px solid #ffe0b2', 
-              cursor: 'pointer', 
-              transition: 'transform 0.2s, box-shadow 0.2s' 
-            }}
-            onClick={() => onSelect('suppliers')}
-            onMouseEnter={(e) => {
-              e.target.style.transform = 'translateY(-2px)';
-              e.target.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.transform = 'none';
-              e.target.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
-            }}
-          >
-            <h3 style={{ marginTop: 0, marginBottom: '12px', color: '#ef6c00', fontSize: '20px' }}>Suppliers</h3>
-            <p style={{ fontSize: '14px', color: '#546e7a', marginBottom: '16px' }}>
-             
+          <div className="responsive-card" style={{
+            background: 'linear-gradient(135deg, #fff3e0, #fff8e1)',
+            borderRadius: '12px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+            border: '1px solid #ffe0b2',
+            cursor: 'pointer',
+            transition: 'transform 0.2s, box-shadow 0.2s'
+          }}
+          onClick={() => onSelect('suppliers')}
+          onMouseEnter={(e) => {
+            e.target.style.transform = 'translateY(-2px)';
+            e.target.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.transform = 'none';
+            e.target.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+          }}>
+            <h3 style={{
+              marginTop: 0,
+              marginBottom: '12px',
+              color: '#ef6c00',
+              fontSize: '20px'
+            }}>
+              Suppliers
+            </h3>
+            <p style={{
+              fontSize: '14px',
+              color: '#546e7a',
+              marginBottom: '16px'
+            }}>
+              Track purchases and payables
             </p>
-            <button style={{ 
-              width: '100%', 
-              padding: '10px 16px', 
-              borderRadius: '8px', 
-              border: 'none', 
-              backgroundColor: '#fb8c00', 
-              color: '#fff', 
-              fontWeight: '600', 
-              cursor: 'pointer', 
-              fontSize: '14px' 
+            <button style={{
+              width: '100%',
+              padding: '10px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              backgroundColor: '#fb8c00',
+              color: '#fff',
+              fontWeight: '600',
+              cursor: 'pointer',
+              fontSize: '14px'
             }}>
               Open Suppliers
             </button>
           </div>
 
-          {/* NEW Expenses Card */}
-          <div 
-            style={{ 
-              background: 'linear-gradient(135deg, #ffebee, #ffcdd2)', 
-              borderRadius: '12px', 
-              padding: '20px', 
-              boxShadow: '0 4px 12px rgba(0,0,0,0.08)', 
-              border: '1px solid #f8bbd9', 
-              cursor: 'pointer', 
-              transition: 'transform 0.2s, box-shadow 0.2s' 
-            }}
-            onClick={() => onSelect('expenses')}
-            onMouseEnter={(e) => {
-              e.target.style.transform = 'translateY(-2px)';
-              e.target.style.boxShadow = '0 8px 24px rgba(244, 67, 54, 0.12)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.transform = 'none';
-              e.target.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
-            }}
-          >
-            <h3 style={{ marginTop: 0, marginBottom: '12px', color: '#c62828', fontSize: '20px' }}>Expenses</h3>
-            <p style={{ fontSize: '14px', color: '#546e7a', marginBottom: '16px' }}>
-              
+          {/* Expenses Card */}
+          <div className="responsive-card" style={{
+            background: 'linear-gradient(135deg, #ffebee, #fcdd2)',
+            borderRadius: '12px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+            border: '1px solid #f8bbd9',
+            cursor: 'pointer',
+            transition: 'transform 0.2s, box-shadow 0.2s'
+          }}
+          onClick={() => onSelect('expenses')}
+          onMouseEnter={(e) => {
+            e.target.style.transform = 'translateY(-2px)';
+            e.target.style.boxShadow = '0 8px 24px rgba(244, 67, 54, 0.12)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.transform = 'none';
+            e.target.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+          }}>
+            <h3 style={{
+              marginTop: 0,
+              marginBottom: '12px',
+              color: '#c62828',
+              fontSize: '20px'
+            }}>
+              Expenses
+            </h3>
+            <p style={{
+              fontSize: '14px',
+              color: '#546e7a',
+              marginBottom: '16px'
+            }}>
+              Monitor all your expenses
             </p>
-            <button style={{ 
-              width: '100%', 
-              padding: '10px 16px', 
-              borderRadius: '8px', 
-              border: 'none', 
-              backgroundColor: '#f44336', 
-              color: '#fff', 
-              fontWeight: '600', 
-              cursor: 'pointer', 
-              fontSize: '14px' 
+            <button style={{
+              width: '100%',
+              padding: '10px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              backgroundColor: '#f44336',
+              color: '#fff',
+              fontWeight: '600',
+              cursor: 'pointer',
+              fontSize: '14px'
             }}>
               Open Expenses
             </button>
@@ -253,107 +308,177 @@ function Dashboard({ onSelect }) {
 
         {/* Business Summary */}
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '40px', color: '#78909c' }}>
+          <div style={{
+            textAlign: 'center',
+            padding: '40px',
+            color: '#78909c'
+          }}>
             Loading business stats...
           </div>
         ) : (
           <>
-            <h3 style={{ marginTop: 0, marginBottom: '16px', color: '#37474f', fontSize: '20px' }}>Business Summary</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+            <h3 style={{
+              marginTop: 0,
+              marginBottom: '16px',
+              color: '#37474f',
+              fontSize: '20px'
+            }}>
+              Business Summary
+            </h3>
+            <div className="responsive-grid" style={{ gap: '16px' }}>
               {/* Total Receivables */}
-              <div style={{ 
-                background: 'linear-gradient(135deg, #e8f5e9, #c8e6c9)', 
-                borderRadius: '12px', 
-                padding: '20px', 
-                textAlign: 'center', 
-                border: '1px solid #a5d6a7' 
+              <div className="responsive-card" style={{
+                background: 'linear-gradient(135deg, #e8f5e9, #c8e6c9)',
+                borderRadius: '12px',
+                padding: '20px',
+                textAlign: 'center',
+                border: '1px solid #a5d6a7'
               }}>
-                <div style={{ fontSize: '14px', color: '#2e7d32', marginBottom: '4px' }}>Total Receivables</div>
-                <div style={{ fontSize: '32px', fontWeight: '700', color: '#1b5e20', marginBottom: '4px' }}>
+                <div style={{
+                  fontSize: '14px',
+                  color: '#2e7d32',
+                  marginBottom: '4px'
+                }}>
+                  Total Receivables
+                </div>
+                <div style={{
+                  fontSize: '32px',
+                  fontWeight: '700',
+                  color: '#1b5e20',
+                  marginBottom: '4px'
+                }}>
                   Rs. {formatAmount(stats.totalReceivables)}
                 </div>
-                <div style={{ fontSize: '12px', color: '#546e7a' }}>
+                <div style={{
+                  fontSize: '12px',
+                  color: '#546e7a'
+                }}>
                   {stats.totalCustomers} customers
                 </div>
               </div>
 
               {/* Total Payables */}
-              <div style={{ 
-                background: 'linear-gradient(135deg, #fff3e0, #ffe0b2)', 
-                borderRadius: '12px', 
-                padding: '20px', 
-                textAlign: 'center', 
-                border: '1px solid #ffcc80' 
+              <div className="responsive-card" style={{
+                background: 'linear-gradient(135deg, #fff3e0, #ffe0b2)',
+                borderRadius: '12px',
+                padding: '20px',
+                textAlign: 'center',
+                border: '1px solid #ffcc80'
               }}>
-                <div style={{ fontSize: '14px', color: '#ef6c00', marginBottom: '4px' }}>Total Payables</div>
-                <div style={{ fontSize: '32px', fontWeight: '700', color: '#e65100', marginBottom: '4px' }}>
+                <div style={{
+                  fontSize: '14px',
+                  color: '#ef6c00',
+                  marginBottom: '4px'
+                }}>
+                  Total Payables
+                </div>
+                <div style={{
+                  fontSize: '32px',
+                  fontWeight: '700',
+                  color: '#e65100',
+                  marginBottom: '4px'
+                }}>
                   Rs. {formatAmount(stats.totalPayables)}
                 </div>
-                <div style={{ fontSize: '12px', color: '#546e7a' }}>
+                <div style={{
+                  fontSize: '12px',
+                  color: '#546e7a'
+                }}>
                   {stats.totalSuppliers} suppliers
                 </div>
               </div>
 
-              {/* NEW Total Expenses */}
-              <div style={{ 
-                background: 'linear-gradient(135deg, #ffebee, #ffcdd2)', 
-                borderRadius: '12px', 
-                padding: '20px', 
-                textAlign: 'center', 
-                border: '1px solid #f8bbd9' 
+              {/* Total Expenses */}
+              <div className="responsive-card" style={{
+                background: 'linear-gradient(135deg, #ffebee, #ffcdd2)',
+                borderRadius: '12px',
+                padding: '20px',
+                textAlign: 'center',
+                border: '1px solid #f8bbd9'
               }}>
-                <div style={{ fontSize: '14px', color: '#c62828', marginBottom: '4px' }}>Total Expenses</div>
-                <div style={{ fontSize: '32px', fontWeight: '700', color: '#d32f2f', marginBottom: '4px' }}>
+                <div style={{
+                  fontSize: '14px',
+                  color: '#c62828',
+                  marginBottom: '4px'
+                }}>
+                  Total Expenses
+                </div>
+                <div style={{
+                  fontSize: '32px',
+                  fontWeight: '700',
+                  color: '#d32f2f',
+                  marginBottom: '4px'
+                }}>
                   Rs. {formatAmount(stats.totalExpenses)}
                 </div>
-                <div style={{ fontSize: '12px', color: '#546e7a' }}>
+                <div style={{
+                  fontSize: '12px',
+                  color: '#546e7a'
+                }}>
                   {stats.totalExpenseCategories} categories
                 </div>
               </div>
 
               {/* Net Profit */}
-              <div style={{ 
-                background: netProfit >= 0 ? 
-                  'linear-gradient(135deg, #e3f2fd, #bbdefb)' : 
-                  'linear-gradient(135deg, #ffebee, #ffcdd2)', 
-                borderRadius: '12px', 
-                padding: '20px', 
-                textAlign: 'center', 
-                border: netProfit >= 0 ? '1px solid #90caf9' : '1px solid #f8bbd9' 
+              <div className="responsive-card" style={{
+                background: netProfit >= 0 
+                  ? 'linear-gradient(135deg, #e3f2fd, #bbdefb)' 
+                  : 'linear-gradient(135deg, #ffebee, #ffcdd2)',
+                borderRadius: '12px',
+                padding: '20px',
+                textAlign: 'center',
+                border: netProfit >= 0 ? '1px solid #90caf9' : '1px solid #f8bbd9'
               }}>
-                <div style={{ fontSize: '14px', color: netProfit >= 0 ? '#1e88e5' : '#c2185b', marginBottom: '4px' }}>
+                <div style={{
+                  fontSize: '14px',
+                  color: netProfit >= 0 ? '#1e88e5' : '#c2185b',
+                  marginBottom: '4px'
+                }}>
                   Net Profit
                 </div>
-                <div style={{ fontSize: '32px', fontWeight: '700', color: netProfit >= 0 ? '#1565c0' : '#ad1457', marginBottom: '4px' }}>
+                <div style={{
+                  fontSize: '32px',
+                  fontWeight: '700',
+                  color: netProfit >= 0 ? '#1565c0' : '#ad1457',
+                  marginBottom: '4px'
+                }}>
                   Rs. {formatAmount(netProfit)}
                 </div>
-                <div style={{ fontSize: '12px', color: '#546e7a' }}>
+                <div style={{
+                  fontSize: '12px',
+                  color: '#546e7a'
+                }}>
                   Receivables - Payables - Expenses
                 </div>
               </div>
             </div>
+
+            {/* Refresh Button */}
+            <div className="responsive-card" style={{
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              background: '#f5f5f5',
+              borderRadius: '12px',
+              padding: '20px',
+              textAlign: 'center',
+              border: '1px solid #e0e0e0',
+              cursor: 'pointer',
+              marginTop: '24px'
+            }}
+            onClick={fetchStats}>
+              <div style={{ fontSize: '24px' }}>↻</div>
+              <div style={{
+                fontSize: '14px',
+                color: '#607d8b',
+                marginTop: '4px'
+              }}>
+                Refresh Stats
+              </div>
+            </div>
           </>
         )}
-
-        {/* Refresh Button */}
-        <div style={{ 
-          display: 'flex', 
-          flexDirection: 'column', 
-          justifyContent: 'center', 
-          alignItems: 'center', 
-          background: '#f5f5f5', 
-          borderRadius: '12px', 
-          padding: '20px', 
-          textAlign: 'center', 
-          border: '1px solid #e0e0e0', 
-          cursor: 'pointer', 
-          marginTop: '24px' 
-        }}
-        onClick={fetchStats}
-        >
-          <div style={{ fontSize: '24px' }}>↻</div>
-          <div style={{ fontSize: '14px', color: '#607d8b', marginTop: '4px' }}>Refresh Stats</div>
-        </div>
       </div>
     </div>
   );
