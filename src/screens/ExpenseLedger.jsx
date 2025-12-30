@@ -1,6 +1,8 @@
+// src/screens/ExpenseLedger.jsx
 import React, { useEffect, useState } from 'react';
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
+import { exportLedgerToPDF, formatIndianCurrency } from '../utils/pdfExport';
 
 const ExpenseLedger = ({ expense, onBack }) => {
   const [entries, setEntries] = useState([]);
@@ -12,43 +14,58 @@ const ExpenseLedger = ({ expense, onBack }) => {
   const [editingEntry, setEditingEntry] = useState(null);
   const [message, setMessage] = useState('');
 
-  // Auto-format date input: 20250715 -> 2025-07-15
+  // Export states
+  const [exportStart, setExportStart] = useState('');
+  const [exportEnd, setExportEnd] = useState('');
+  const [exportLoading, setExportLoading] = useState(false);
+
+  // Auto-format date input (20820715 → 2082-07-15)
   const handleDateChange = (e) => {
     let value = e.target.value.replace(/[^0-9]/g, ''); // Only numbers
-    
-    // Auto-format: after 4 digits (year) add -, after 6 digits (year+month) add -
+
+    // Auto-format: after 4 digits (year) add -, after 6 digits (year-month) add -
     if (value.length >= 4) {
       value = value.slice(0, 4) + '-' + value.slice(4);
     }
     if (value.length >= 7) {
       value = value.slice(0, 7) + '-' + value.slice(7);
     }
-    
+
     setDate(value);
+  };
+
+  // Same for export date inputs
+  const handleExportDateChange = (setter) => (e) => {
+    let value = e.target.value.replace(/[^0-9]/g, '');
+    if (value.length >= 4) {
+      value = value.slice(0, 4) + '-' + value.slice(4);
+    }
+    if (value.length >= 7) {
+      value = value.slice(0, 7) + '-' + value.slice(7);
+    }
+    setter(value);
   };
 
   useEffect(() => {
     if (!expense?.id) return;
 
-    // Real-time listener ordered by createdAt
     const q = query(
-      collection(db, 'expenses', expense.id, 'ledger'), 
+      collection(db, 'expenses', expense.id, 'ledger'),
       orderBy('createdAt', 'asc')
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      // Step 1: Calculate chronologically (oldest first) for correct running totals
-      let chronoData = snapshot.docs.map(d => {
+      let chronoData = snapshot.docs.map((d) => {
         const raw = d.data();
         const amt = Number(raw.amount) || 0;
         return {
           id: d.id,
           ...raw,
-          amount: amt
+          amount: amt,
         };
       });
 
-      // Sort chronologically for balance calculation
+      // Sort chronologically for running total calculation
       chronoData.sort((a, b) => {
         const da = a.date;
         const dbDate = b.date;
@@ -63,16 +80,17 @@ const ExpenseLedger = ({ expense, onBack }) => {
       // Calculate running totals (all expenses are positive outflows)
       let runningTotal = 0;
       let expenseSum = 0;
-      chronoData = chronoData.map(entry => {
+
+      chronoData = chronoData.map((entry) => {
         runningTotal += entry.amount;
         expenseSum += entry.amount;
         return {
           ...entry,
-          runningTotal
+          runningTotal,
         };
       });
 
-      // Reverse for display (newest first, totals remain correct)
+      // Reverse for display (newest first)
       const displayData = [...chronoData].reverse();
       setEntries(displayData);
       setTotalExpenses(expenseSum);
@@ -89,13 +107,23 @@ const ExpenseLedger = ({ expense, onBack }) => {
     setEditingEntry(null);
   };
 
+  const updateExpenseLastActivity = async (activityDate) => {
+    try {
+      await updateDoc(doc(db, 'expenses', expense.id), {
+        lastActivityDate: activityDate,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      console.error('Failed to update expense lastActivityDate:', err);
+    }
+  };
+
   const addOrUpdateEntry = async () => {
     if (!amount || !date) {
       setMessage('Amount and date are required');
       return;
     }
 
-    // Simple yyyy-mm-dd validation
     const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
     if (!dateRegex.test(date)) {
       setMessage('Please enter date in yyyy-mm-dd format');
@@ -104,27 +132,24 @@ const ExpenseLedger = ({ expense, onBack }) => {
 
     try {
       if (editingEntry) {
-        // Update existing entry
         await updateDoc(
           doc(db, 'expenses', expense.id, 'ledger', editingEntry.id),
           {
             amount: Number(amount),
             date,
-            note
+            note,
           }
         );
+        await updateExpenseLastActivity(date);
         setMessage('Entry updated successfully');
       } else {
-        // Add new entry
-        await addDoc(
-          collection(db, 'expenses', expense.id, 'ledger'),
-          {
-            amount: Number(amount),
-            date,
-            note,
-            createdAt: serverTimestamp()
-          }
-        );
+        await addDoc(collection(db, 'expenses', expense.id, 'ledger'), {
+          amount: Number(amount),
+          date,
+          note,
+          createdAt: serverTimestamp(),
+        });
+        await updateExpenseLastActivity(date);
         setMessage('Entry added successfully');
       }
       resetForm();
@@ -138,14 +163,25 @@ const ExpenseLedger = ({ expense, onBack }) => {
     setEditingEntry(entry);
     setAmount(entry.amount.toString());
     setDate(entry.date);
-    setNote(entry.note || '');
+    setNote(entry.note);
   };
 
   const handleDeleteEntry = async (entryId) => {
     if (!window.confirm('Are you sure you want to delete this entry?')) return;
-    
+
     try {
       await deleteDoc(doc(db, 'expenses', expense.id, 'ledger', entryId));
+
+      if (entries.length === 1) {
+        const remainingEntries = entries.filter((e) => e.id !== entryId);
+        const mostRecentDate = remainingEntries[0]?.date || null;
+        await updateExpenseLastActivity(mostRecentDate);
+      } else {
+        await updateDoc(doc(db, 'expenses', expense.id), {
+          lastActivityDate: null,
+          updatedAt: serverTimestamp(),
+        });
+      }
       setMessage('Entry deleted successfully');
     } catch (err) {
       console.error(err);
@@ -154,17 +190,84 @@ const ExpenseLedger = ({ expense, onBack }) => {
   };
 
   const formatAmount = (num) => {
-    return new Intl.NumberFormat('en-IN').format(Math.round(num));
+    return new Intl.NumberFormat('en-IN').format(num);
+  };
+
+  // EXPORT FUNCTIONALITY
+  const handleExportPDF = async () => {
+    if (!exportStart) {
+      setMessage('Please select a start date for export');
+      return;
+    }
+
+    setExportLoading(true);
+    setMessage('');
+
+    try {
+      // Filter entries by date range
+      const filteredEntries = entries.filter((entry) => {
+        const entryDate = new Date(entry.date);
+        const startDate = new Date(exportStart);
+        const endDate = exportEnd ? new Date(exportEnd) : new Date('9999-12-31');
+
+        return entryDate >= startDate && entryDate <= endDate;
+      });
+
+      if (filteredEntries.length === 0) {
+        setMessage('No entries found in selected date range');
+        setExportLoading(false);
+        return;
+      }
+
+      // Calculate opening balance (entries BEFORE start date)
+      const openingBalance = entries
+        .filter((e) => new Date(e.date) < new Date(exportStart))
+        .reduce((sum, e) => sum + e.amount, 0);
+
+      // Closing balance (last filtered entry)
+      const closingBalance = filteredEntries[filteredEntries.length - 1]?.runningTotal || openingBalance;
+
+      // Totals for period
+      const periodExpenses = filteredEntries.reduce((sum, e) => sum + e.amount, 0);
+
+      // Prepare PDF data
+      const pdfData = {
+        entityName: expense.name,
+        entityType: 'expense',
+        entries: filteredEntries.sort((a, b) => new Date(a.date) - new Date(b.date)), // Oldest first
+        openingBalance,
+        closingBalance,
+        totalDebit: periodExpenses,
+        totalCredit: 0, // Expenses have no credits
+        dateRange: { from: exportStart, to: exportEnd },
+        generatedDate: new Date().toLocaleDateString('en-IN'),
+      };
+
+      // Trigger PDF generation
+      const success = await exportLedgerToPDF(
+        pdfData,
+        `Expense_Ledger_${expense.name.replace(/[^a-zA-Z0-9]/g, '_')}_${exportStart}_to_${exportEnd || 'current'}.pdf`
+      );
+
+      if (success) {
+        setMessage('PDF exported successfully!');
+        setExportStart('');
+        setExportEnd('');
+      } else {
+        setMessage('Failed to generate PDF. Please try again.');
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      setMessage('Export failed. Please try again: ' + error.message);
+    } finally {
+      setExportLoading(false);
+    }
   };
 
   if (!expense) return null;
 
   return (
-    <div style={{ 
-      minHeight: '100vh', 
-      background: 'linear-gradient(135deg, #ffebee, #ffcdd2)', 
-      padding: '24px' 
-    }}>
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #ffebee, #ffcdd2)', padding: '24px' }}>
       <div style={{ 
         maxWidth: '900px', 
         margin: '0 auto', 
@@ -175,23 +278,25 @@ const ExpenseLedger = ({ expense, onBack }) => {
         border: '1px solid #e0e0e0' 
       }}>
         {/* Back Button */}
-        <button 
+        <button
           onClick={onBack}
-          style={{ 
-            marginBottom: '12px', 
-            padding: '6px 12px', 
-            borderRadius: '999px', 
-            border: '1px solid #cfd8dc', 
-            backgroundColor: '#fafafa', 
-            cursor: 'pointer' 
+          style={{
+            marginBottom: '12px',
+            padding: '6px 12px',
+            borderRadius: '999px',
+            border: '1px solid #cfd8dc',
+            backgroundColor: '#fafafa',
+            cursor: 'pointer'
           }}
         >
-          Back to Expenses
+          ← Back to Expenses
         </button>
 
-        <h2 style={{ marginTop: 0, color: '#1a237e', fontSize: '28px' }}>
-          Ledger for {expense.name}
-        </h2>
+        {/* Header */}
+        <h2 style={{ marginTop: 0, color: '#1a237e' }}>Ledger for {expense.name}</h2>
+        <p style={{ color: '#546e7a', marginBottom: '16px' }}>
+          Total Expenses: Rs. {formatAmount(totalExpenses)}
+        </p>
 
         {/* Add/Edit Form */}
         <div style={{ 
@@ -208,11 +313,11 @@ const ExpenseLedger = ({ expense, onBack }) => {
             placeholder="Amount"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            style={{ 
-              padding: '8px 10px', 
-              borderRadius: '8px', 
-              border: '1px solid #cfd8dc', 
-              minWidth: '100px' 
+            style={{
+              padding: '8px 10px',
+              borderRadius: '8px',
+              border: '1px solid #cfd8dc',
+              minWidth: '100px'
             }}
           />
           <input
@@ -220,11 +325,11 @@ const ExpenseLedger = ({ expense, onBack }) => {
             placeholder="Date (2082-07-15)"
             value={date}
             onChange={handleDateChange}
-            style={{ 
-              padding: '8px 10px', 
-              borderRadius: '8px', 
-              border: '1px solid #cfd8dc', 
-              minWidth: '140px' 
+            style={{
+              padding: '8px 10px',
+              borderRadius: '8px',
+              border: '1px solid #cfd8dc',
+              minWidth: '140px'
             }}
           />
           <input
@@ -232,25 +337,25 @@ const ExpenseLedger = ({ expense, onBack }) => {
             placeholder="Note (optional)"
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            style={{ 
-              flex: '1 1 120px', 
-              minWidth: '120px', 
-              padding: '8px 10px', 
-              borderRadius: '8px', 
-              border: '1px solid #cfd8dc' 
+            style={{
+              flex: '1 1 120px',
+              minWidth: '120px',
+              padding: '8px 10px',
+              borderRadius: '8px',
+              border: '1px solid #cfd8dc'
             }}
           />
           <button
             onClick={addOrUpdateEntry}
-            style={{ 
-              padding: '8px 14px', 
-              borderRadius: '8px', 
-              border: 'none', 
-              backgroundColor: '#f44336', 
-              color: '#fff', 
-              cursor: 'pointer', 
-              fontWeight: 500, 
-              minWidth: '120px' 
+            style={{
+              padding: '8px 14px',
+              borderRadius: '8px',
+              border: 'none',
+              backgroundColor: '#f44336',
+              color: '#fff',
+              cursor: 'pointer',
+              fontWeight: '500',
+              minWidth: '120px'
             }}
           >
             {editingEntry ? 'Update Entry' : 'Add Entry'}
@@ -258,15 +363,15 @@ const ExpenseLedger = ({ expense, onBack }) => {
           {editingEntry && (
             <button
               onClick={resetForm}
-              style={{ 
-                padding: '8px 14px', 
-                borderRadius: '8px', 
-                border: '1px solid #cfd8dc', 
-                backgroundColor: '#fafafa', 
-                color: '#607d8b', 
-                cursor: 'pointer', 
-                fontWeight: 500, 
-                minWidth: '80px' 
+              style={{
+                padding: '8px 14px',
+                borderRadius: '8px',
+                border: '1px solid #cfd8dc',
+                backgroundColor: '#fafafa',
+                color: '#607d8b',
+                cursor: 'pointer',
+                fontWeight: '500',
+                minWidth: '80px'
               }}
             >
               Cancel
@@ -276,37 +381,85 @@ const ExpenseLedger = ({ expense, onBack }) => {
 
         {/* Message */}
         {message && (
-          <p style={{ 
-            marginBottom: '12px', 
-            padding: '10px', 
-            borderRadius: '10px', 
-            backgroundColor: '#fff3e0', 
-            color: '#ef6c00', 
-            fontSize: '14px' 
+          <div style={{
+            marginBottom: '12px',
+            padding: '10px',
+            borderRadius: '10px',
+            backgroundColor: '#ffebee',
+            color: '#c62828',
+            fontSize: '14px'
           }}>
             {message}
-          </p>
+          </div>
         )}
 
-        {/* Summary */}
-        <div style={{ 
-          marginBottom: '12px', 
-          padding: '10px', 
-          borderRadius: '10px', 
-          backgroundColor: '#ffebee', 
-          color: '#c62828', 
-          fontSize: '14px' 
+        {/* EXPORT SECTION */}
+        <div style={{
+          marginBottom: '20px',
+          padding: '16px',
+          backgroundColor: '#ffebee',
+          borderRadius: '10px',
+          border: '2px solid #f44336'
         }}>
-          <strong>Total Expenses:</strong> Rs. {formatAmount(totalExpenses)}
+          <h4 style={{ margin: '0 0 12px 0', color: '#c62828' }}>📊 Export Ledger to PDF</h4>
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'end' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', color: '#555', marginBottom: '4px' }}>From Date</label>
+              <input
+                type="text"
+                placeholder="2082-07-15"
+                value={exportStart}
+                onChange={handleExportDateChange(setExportStart)}
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: '2px solid #f44336',
+                  minWidth: '140px',
+                  fontSize: '14px'
+                }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', color: '#555', marginBottom: '4px' }}>To Date (optional)</label>
+              <input
+                type="text"
+                placeholder="2082-12-15"
+                value={exportEnd}
+                onChange={handleExportDateChange(setExportEnd)}
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #cfd8dc',
+                  minWidth: '140px',
+                  fontSize: '14px'
+                }}
+              />
+            </div>
+            <button
+              onClick={handleExportPDF}
+              disabled={exportLoading || !exportStart}
+              style={{
+                padding: '12px 24px',
+                borderRadius: '8px',
+                border: 'none',
+                backgroundColor: exportLoading || !exportStart ? '#bdbdbd' : '#f44336',
+                color: '#fff',
+                cursor: exportLoading || !exportStart ? 'not-allowed' : 'pointer',
+                fontWeight: '600',
+                fontSize: '14px',
+                minHeight: '48px'
+              }}
+            >
+              {exportLoading ? 'Generating...' : '📄 Export PDF'}
+            </button>
+          </div>
         </div>
 
-        {/* Loading/Empty States */}
         {loading ? (
           <p>Loading ledger...</p>
         ) : entries.length === 0 ? (
           <p style={{ color: '#78909c' }}>No expense entries yet</p>
         ) : (
-          /* Ledger Table */
           <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '8px' }}>
             <thead>
               <tr style={{ backgroundColor: '#eeeeee' }}>
@@ -323,55 +476,46 @@ const ExpenseLedger = ({ expense, onBack }) => {
                   <td style={{ border: '1px solid #e0e0e0', padding: '8px', fontSize: '14px' }}>
                     {entry.date}
                   </td>
-                  <td style={{ 
-                    border: '1px solid #e0e0e0', 
-                    padding: '8px', 
-                    color: '#d32f2f', 
-                    fontWeight: 600 
+                  <td style={{
+                    border: '1px solid #e0e0e0',
+                    padding: '8px',
+                    color: '#d32f2f',
+                    fontWeight: '600'
                   }}>
                     Rs. {formatAmount(entry.amount)}
                   </td>
-                  <td style={{ 
-                    border: '1px solid #e0e0e0', 
-                    padding: '8px', 
-                    fontSize: '14px' 
-                  }}>
+                  <td style={{ border: '1px solid #e0e0e0', padding: '8px', fontSize: '14px' }}>
                     Rs. {formatAmount(entry.runningTotal)}
                   </td>
-                  <td style={{ 
-                    border: '1px solid #e0e0e0', 
-                    padding: '8px', 
-                    fontSize: '14px', 
-                    color: '#455a64' 
-                  }}>
+                  <td style={{ border: '1px solid #e0e0e0', padding: '8px', fontSize: '14px', color: '#455a64' }}>
                     {entry.note || '-'}
                   </td>
                   <td style={{ border: '1px solid #e0e0e0', padding: '8px' }}>
                     <button
                       onClick={() => startEditEntry(entry)}
-                      style={{ 
-                        marginRight: '4px', 
-                        padding: '4px 8px', 
-                        borderRadius: '4px', 
-                        border: '1px solid #42a5f5', 
-                        backgroundColor: '#e3f2fd', 
-                        color: '#1976d2', 
-                        fontSize: '12px', 
-                        cursor: 'pointer' 
+                      style={{
+                        marginRight: '4px',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        border: '1px solid #42a5f5',
+                        backgroundColor: '#e3f2fd',
+                        color: '#1976d2',
+                        fontSize: '12px',
+                        cursor: 'pointer'
                       }}
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => handleDeleteEntry(entry.id)}
-                      style={{ 
-                        padding: '4px 8px', 
-                        borderRadius: '4px', 
-                        border: '1px solid #ef5350', 
-                        backgroundColor: '#ffebee', 
-                        color: '#d32f2f', 
-                        fontSize: '12px', 
-                        cursor: 'pointer' 
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        border: '1px solid #ef5350',
+                        backgroundColor: '#ffebee',
+                        color: '#d32f2f',
+                        fontSize: '12px',
+                        cursor: 'pointer'
                       }}
                     >
                       Delete
