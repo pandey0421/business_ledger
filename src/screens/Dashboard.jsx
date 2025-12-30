@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../firebase';
 import { collection, getDocs } from 'firebase/firestore';
-import './styles/ResponsiveStyles.css'; // Add responsive CSS
+import '../../styles/ResponsiveStyles.css';
 
 function Dashboard({ onSelect }) {
   const [stats, setStats] = useState({
