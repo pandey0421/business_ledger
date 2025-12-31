@@ -12,20 +12,29 @@ const ExpenseLedger = ({ expense, onBack }) => {
   const [totalExpenses, setTotalExpenses] = useState(0);
   const [editingEntry, setEditingEntry] = useState(null);
   const [message, setMessage] = useState('');
-  
-  // Export states
   const [exportStart, setExportStart] = useState('');
   const [exportEnd, setExportEnd] = useState('');
   const [exportLoading, setExportLoading] = useState(false);
+  const [isMobile, setIsMobile] = useState(false); // Mobile responsive hook
+
+  // Mobile responsive detection
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth <= 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Auto-format date input (20820715 -> 2082-07-15)
   const handleDateChange = (e) => {
-    let value = e.target.value.replace(/[^0-9]/g, '');
+    let value = e.target.value.replace(/[^0-9]/g, ''); // Only numbers
+    // Auto-format: after 4 digits (year) add -, after 6 digits (year-month) add -
     if (value.length >= 4) value = value.slice(0, 4) + '-' + value.slice(4);
     if (value.length >= 7) value = value.slice(0, 7) + '-' + value.slice(7);
     setDate(value);
   };
 
+  // Same for export date inputs
   const handleExportDateChange = (setter) => (e) => {
     let value = e.target.value.replace(/[^0-9]/g, '');
     if (value.length >= 4) value = value.slice(0, 4) + '-' + value.slice(4);
@@ -40,9 +49,8 @@ const ExpenseLedger = ({ expense, onBack }) => {
       collection(db, 'expenses', expense.id, 'ledger'),
       orderBy('createdAt', 'asc')
     );
-    
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      let chronoData = snapshot.docs.map(d => {
+      let chronoData = snapshot.docs.map((d) => {
         const raw = d.data();
         const amt = Number(raw.amount) || 0;
         return { id: d.id, ...raw, amount: amt };
@@ -63,7 +71,7 @@ const ExpenseLedger = ({ expense, onBack }) => {
       // Calculate running totals (all expenses are positive outflows)
       let runningTotal = 0;
       let expenseSum = 0;
-      chronoData = chronoData.map(entry => {
+      chronoData = chronoData.map((entry) => {
         runningTotal += entry.amount;
         expenseSum += entry.amount;
         return { ...entry, runningTotal };
@@ -76,7 +84,7 @@ const ExpenseLedger = ({ expense, onBack }) => {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return unsubscribe;
   }, [expense]);
 
   const resetForm = () => {
@@ -143,9 +151,8 @@ const ExpenseLedger = ({ expense, onBack }) => {
     if (!window.confirm('Are you sure you want to delete this entry?')) return;
     try {
       await deleteDoc(doc(db, 'expenses', expense.id, 'ledger', entryId));
-      
       if (entries.length === 1) {
-        const remainingEntries = entries.filter(e => e.id !== entryId);
+        const remainingEntries = entries.filter((e) => e.id !== entryId);
         const mostRecentDate = remainingEntries[0]?.date || null;
         await updateExpenseLastActivity(mostRecentDate);
       } else {
@@ -165,6 +172,7 @@ const ExpenseLedger = ({ expense, onBack }) => {
     return new Intl.NumberFormat('en-IN').format(num);
   };
 
+  // EXPORT FUNCTIONALITY
   const handleExportPDF = async () => {
     if (!exportStart) {
       setMessage('Please select a start date for export');
@@ -173,7 +181,8 @@ const ExpenseLedger = ({ expense, onBack }) => {
     setExportLoading(true);
     setMessage('');
     try {
-      const filteredEntries = entries.filter(entry => {
+      // Filter entries by date range
+      const filteredEntries = entries.filter((entry) => {
         const entryDate = new Date(entry.date);
         const startDate = new Date(exportStart);
         const endDate = exportEnd ? new Date(exportEnd) : new Date('9999-12-31');
@@ -186,18 +195,22 @@ const ExpenseLedger = ({ expense, onBack }) => {
         return;
       }
 
+      // Calculate opening balance (entries BEFORE start date)
       const openingBalance = entries
-        .filter(e => new Date(e.date) < new Date(exportStart))
+        .filter((e) => new Date(e.date) < new Date(exportStart))
         .reduce((sum, e) => sum + e.amount, 0);
 
+      // Closing balance (last filtered entry)
       const closingBalance = filteredEntries[filteredEntries.length - 1]?.runningTotal || openingBalance;
 
+      // Totals for period
       const periodExpenses = filteredEntries.reduce((sum, e) => sum + e.amount, 0);
 
+      // Prepare PDF data
       const pdfData = {
         entityName: expense.name,
         entityType: 'expense',
-        entries: filteredEntries.sort((a, b) => new Date(a.date) - new Date(b.date)),
+        entries: filteredEntries.sort((a, b) => new Date(a.date) - new Date(b.date)), // Oldest first
         openingBalance,
         closingBalance,
         totalDebit: periodExpenses,
@@ -206,11 +219,11 @@ const ExpenseLedger = ({ expense, onBack }) => {
         generatedDate: new Date().toLocaleDateString('en-IN')
       };
 
+      // Trigger PDF generation
       const success = await exportLedgerToPDF(
         pdfData,
         `ExpenseLedger_${expense.name.replace(/[^a-zA-Z0-9]/g, '')}_ledger_${exportStart}to${exportEnd || 'current'}.pdf`
       );
-
       if (success) {
         setMessage('PDF exported successfully!');
         setExportStart('');
@@ -229,64 +242,65 @@ const ExpenseLedger = ({ expense, onBack }) => {
   if (!expense) return null;
 
   return (
-    <div 
-      style={{
-        minHeight: '100vh',
-        background: 'linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%)',
-        display: 'flex',
-        flexDirection: 'column',
-        width: '100vw',
-        margin: 0,
-        padding: '24px',
-        overflowX: 'hidden'
-      }}
-    >
-      <div 
-        style={{
-          maxWidth: '1200px',
-          margin: '0 auto',
-          width: '100%',
-          backgroundColor: '#ffffff',
-          borderRadius: '16px',
-          padding: '32px',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
-          border: '1px solid #e0e0e0'
-        }}
-      >
-        {/* Back Button & Header - BOLD RED THEME */}
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '32px', gap: '16px' }}>
-          <button 
-            onClick={onBack}
-            style={{
-              padding: '12px 20px',
-              borderRadius: '999px',
-              border: '1px solid #cfd8dc',
-              backgroundColor: '#fafafa',
-              cursor: 'pointer',
-              fontSize: '14px',
-              color: '#607d8b',
-              fontWeight: '500'
-            }}
-          >
+    <div style={{
+      minHeight: '100vh',
+      background: 'linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%)',
+      display: 'flex',
+      flexDirection: 'column',
+      width: '100vw',
+      margin: 0,
+      padding: isMobile ? '0px 12px' : '24px',
+      overflowX: 'hidden',
+      boxSizing: 'border-box'
+    }}>
+      <div style={{
+        maxWidth: isMobile ? '100vw' : '1200px',
+        margin: isMobile ? '0' : '0 auto',
+        width: '100%',
+        backgroundColor: '#ffffff',
+        borderRadius: isMobile ? '0' : '16px',
+        padding: isMobile ? '16px' : '32px',
+        boxShadow: isMobile ? 'none' : '0 8px 32px rgba(0,0,0,0.12)',
+        border: isMobile ? 'none' : '1px solid #e0e0e0',
+        boxSizing: 'border-box'
+      }}>
+        {/* Back Button + Header */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          marginBottom: isMobile ? '20px' : '32px',
+          gap: isMobile ? '12px' : '16px',
+          flexDirection: isMobile ? 'column' : 'row'
+        }}>
+          <button onClick={onBack} style={{
+            padding: '12px 20px',
+            borderRadius: '999px',
+            border: '1px solid #cfd8dc',
+            backgroundColor: '#fafafa',
+            cursor: 'pointer',
+            fontSize: '14px',
+            color: '#607d8b',
+            fontWeight: '500'
+          }}>
             ← Back to Expenses
           </button>
           <div>
-            <h2 style={{ margin: '0 0 16px 0', color: '#1a237e', fontSize: '32px', fontWeight: 'bold' }}>
+            <h2 style={{
+              margin: '0 0 16px 0',
+              color: '#1a237e',
+              fontSize: isMobile ? '28px' : '32px',
+              fontWeight: 'bold'
+            }}>
               Ledger for <span style={{ color: '#c62828', fontWeight: 'bold' }}>{expense.name}</span>
             </h2>
-            
             {/* Bold Colored Total Expenses */}
-            <p style={{ 
-              margin: 0, 
-              fontSize: '20px', 
+            <p style={{
+              margin: 0,
+              fontSize: isMobile ? '18px' : '20px',
               fontWeight: '800',
               color: '#d32f2f'
             }}>
-              Total Expenses: <span style={{ 
-                fontSize: '24px', 
-                fontWeight: '900',
-                color: '#b71c1c'
-              }}>
+              Total Expenses: <span style={{ fontSize: isMobile ? '22px' : '24px', fontWeight: '900', color: '#b71c1c' }}>
                 Rs. {formatAmount(totalExpenses)}
               </span>
             </p>
@@ -294,16 +308,17 @@ const ExpenseLedger = ({ expense, onBack }) => {
         </div>
 
         {/* Add/Edit Form */}
-        <div style={{ 
-          display: 'flex', 
-          gap: '16px', 
-          flexWrap: 'wrap', 
-          marginBottom: '24px', 
-          backgroundColor: '#f5f5f5', 
-          padding: '24px', 
-          borderRadius: '16px' 
+        <div style={{
+          display: 'flex',
+          gap: isMobile ? '12px' : '16px',
+          flexWrap: 'wrap',
+          marginBottom: isMobile ? '20px' : '24px',
+          flexDirection: isMobile ? 'column' : 'row',
+          backgroundColor: '#f5f5f5',
+          padding: isMobile ? '16px' : '24px',
+          borderRadius: '16px'
         }}>
-          <div style={{ flex: '0 0 140px' }}>
+          <div style={{ flex: isMobile ? '1 1 100%' : '0 0 140px' }}>
             <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#37474f', fontSize: '14px' }}>
               Amount *
             </label>
@@ -318,13 +333,14 @@ const ExpenseLedger = ({ expense, onBack }) => {
                 borderRadius: '10px',
                 border: '1px solid #cfd8dc',
                 outline: 'none',
-                fontSize: '14px'
+                fontSize: '14px',
+                boxSizing: 'border-box'
               }}
             />
           </div>
-          <div style={{ flex: '0 0 160px' }}>
+          <div style={{ flex: isMobile ? '1 1 100%' : '0 0 160px' }}>
             <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#37474f', fontSize: '14px' }}>
-              Date * (yyyy-mm-dd)
+              Date (yyyy-mm-dd)
             </label>
             <input
               type="text"
@@ -337,11 +353,12 @@ const ExpenseLedger = ({ expense, onBack }) => {
                 borderRadius: '10px',
                 border: '1px solid #cfd8dc',
                 outline: 'none',
-                fontSize: '14px'
+                fontSize: '14px',
+                boxSizing: 'border-box'
               }}
             />
           </div>
-          <div style={{ flex: 1, minWidth: '140px' }}>
+          <div style={{ flex: isMobile ? '1 1 100%' : '1', minWidth: isMobile ? 'auto' : '140px' }}>
             <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#37474f', fontSize: '14px' }}>
               Note (optional)
             </label>
@@ -356,12 +373,19 @@ const ExpenseLedger = ({ expense, onBack }) => {
                 borderRadius: '10px',
                 border: '1px solid #cfd8dc',
                 outline: 'none',
-                fontSize: '14px'
+                fontSize: '14px',
+                boxSizing: 'border-box'
               }}
             />
           </div>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'end', flexWrap: 'wrap' }}>
-            <button 
+          <div style={{
+            display: 'flex',
+            gap: isMobile ? '8px' : '12px',
+            alignItems: 'end',
+            flexWrap: 'wrap',
+            flex: isMobile ? '1 1 100%' : 'auto'
+          }}>
+            <button
               onClick={addOrUpdateEntry}
               style={{
                 padding: '12px 24px',
@@ -373,13 +397,14 @@ const ExpenseLedger = ({ expense, onBack }) => {
                 fontWeight: '600',
                 fontSize: '14px',
                 whiteSpace: 'nowrap',
-                minHeight: '48px'
+                minHeight: '48px',
+                flex: isMobile ? '1 1 100%' : 'auto'
               }}
             >
               {editingEntry ? 'Update Entry' : 'Add Entry'}
             </button>
             {editingEntry && (
-              <button 
+              <button
                 onClick={resetForm}
                 style={{
                   padding: '12px 24px',
@@ -390,7 +415,8 @@ const ExpenseLedger = ({ expense, onBack }) => {
                   cursor: 'pointer',
                   fontWeight: '500',
                   fontSize: '14px',
-                  minHeight: '48px'
+                  minHeight: '48px',
+                  flex: isMobile ? '1 1 100%' : 'auto'
                 }}
               >
                 Cancel
@@ -401,31 +427,36 @@ const ExpenseLedger = ({ expense, onBack }) => {
 
         {/* Message */}
         {message && (
-          <div style={{ 
-            marginBottom: '24px', 
-            padding: '16px 20px', 
-            borderRadius: '12px', 
-            backgroundColor: '#ffebee', 
+          <div style={{
+            marginBottom: isMobile ? '16px' : '24px',
+            padding: '16px 20px',
+            borderRadius: '12px',
+            backgroundColor: '#ffebee',
             color: '#c62828',
             fontSize: '14px',
-            border: '1px solid #ffcdd2'
+            border: '1px solid #ffccdd'
           }}>
             {message}
           </div>
         )}
 
         {/* EXPORT SECTION - RED THEME */}
-        <div style={{ 
-          marginBottom: '32px', 
-          padding: '24px', 
-          backgroundColor: '#ffebee', 
-          borderRadius: '16px', 
-          border: '2px solid #f44336' 
+        <div style={{
+          marginBottom: isMobile ? '24px' : '32px',
+          padding: isMobile ? '16px' : '24px',
+          backgroundColor: '#ffebee',
+          borderRadius: '16px',
+          border: '2px solid #f44336'
         }}>
-          <h4 style={{ margin: '0 0 20px 0', color: '#c62828', fontSize: '20px' }}>
+          <h4 style={{ margin: '0 0 20px 0', color: '#c62828', fontSize: isMobile ? '18px' : '20px' }}>
             Export Ledger to PDF
           </h4>
-          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'end' }}>
+          <div style={{
+            display: 'flex',
+            gap: isMobile ? '12px' : '16px',
+            flexWrap: 'wrap',
+            alignItems: 'end'
+          }}>
             <div>
               <label style={{ display: 'block', fontSize: '13px', color: '#555', marginBottom: '6px', fontWeight: '500' }}>
                 From Date *
@@ -439,8 +470,9 @@ const ExpenseLedger = ({ expense, onBack }) => {
                   padding: '12px 16px',
                   borderRadius: '10px',
                   border: '2px solid #f44336',
-                  minWidth: '160px',
-                  fontSize: '14px'
+                  minWidth: isMobile ? '140px' : '160px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box'
                 }}
               />
             </div>
@@ -457,12 +489,13 @@ const ExpenseLedger = ({ expense, onBack }) => {
                   padding: '12px 16px',
                   borderRadius: '10px',
                   border: '1px solid #cfd8dc',
-                  minWidth: '160px',
-                  fontSize: '14px'
+                  minWidth: isMobile ? '140px' : '160px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box'
                 }}
               />
             </div>
-            <button 
+            <button
               onClick={handleExportPDF}
               disabled={exportLoading || !exportStart}
               style={{
@@ -474,7 +507,9 @@ const ExpenseLedger = ({ expense, onBack }) => {
                 cursor: exportLoading || !exportStart ? 'not-allowed' : 'pointer',
                 fontWeight: '600',
                 fontSize: '14px',
-                minHeight: '52px'
+                minHeight: '52px',
+                whiteSpace: 'nowrap',
+                flex: isMobile ? '1 1 100%' : 'auto'
               }}
             >
               {exportLoading ? 'Generating...' : 'Export PDF'}
@@ -493,64 +528,67 @@ const ExpenseLedger = ({ expense, onBack }) => {
           </p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table 
-              style={{ 
-                width: '100%', 
-                borderCollapse: 'collapse', 
-                marginTop: '8px',
-                borderRadius: '12px',
-                overflow: 'hidden',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
-              }}
-            >
+            <table style={{
+              width: '100%',
+              borderCollapse: 'collapse',
+              marginTop: '8px',
+              borderRadius: '12px',
+              overflow: 'hidden',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+            }}>
               <thead>
                 <tr style={{ backgroundColor: '#ffebee' }}>
-                  <th style={{ border: '1px solid #e0e0e0', padding: '16px 12px', fontSize: '14px', fontWeight: '600', color: '#c62828' }}>Date</th>
-                  <th style={{ border: '1px solid #e0e0e0', padding: '16px 12px', fontSize: '14px', fontWeight: '600', color: '#c62828' }}>Amount</th>
-                  <th style={{ border: '1px solid #e0e0e0', padding: '16px 12px', fontSize: '14px', fontWeight: '600', color: '#c62828' }}>Running Total</th>
-                  <th style={{ border: '1px solid #e0e0e0', padding: '16px 12px', fontSize: '14px', fontWeight: '600', color: '#c62828' }}>Note</th>
-                  <th style={{ border: '1px solid #e0e0e0', padding: '16px 12px', fontSize: '14px', fontWeight: '600', color: '#c62828' }}>Actions</th>
+                  <th style={{ border: '1px solid #e0e0e0', padding: isMobile ? '12px 8px' : '16px 12px', fontSize: '14px', fontWeight: '600', whiteSpace: 'nowrap', color: '#c62828' }}>
+                    Date
+                  </th>
+                  <th style={{ border: '1px solid #e0e0e0', padding: isMobile ? '12px 8px' : '16px 12px', fontSize: '14px', fontWeight: '600', whiteSpace: 'nowrap', color: '#c62828' }}>
+                    Amount
+                  </th>
+                  <th style={{ border: '1px solid #e0e0e0', padding: isMobile ? '12px 8px' : '16px 12px', fontSize: '14px', fontWeight: '600', whiteSpace: 'nowrap', color: '#c62828' }}>
+                    Running Total
+                  </th>
+                  <th style={{ border: '1px solid #e0e0e0', padding: isMobile ? '12px 8px' : '16px 12px', fontSize: '14px', fontWeight: '600', whiteSpace: 'nowrap', color: '#c62828' }}>
+                    Note
+                  </th>
+                  <th style={{ border: '1px solid #e0e0e0', padding: isMobile ? '12px 8px' : '16px 12px', fontSize: '14px', fontWeight: '600', whiteSpace: 'nowrap', color: '#c62828' }}>
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {entries.map(entry => (
-                  <tr 
+                {entries.map((entry) => (
+                  <tr
                     key={entry.id}
-                    style={{ 
+                    style={{
                       backgroundColor: entry.id === editingEntry?.id ? '#ffebee' : 'transparent',
                       transition: 'background-color 0.2s'
                     }}
                   >
-                    <td style={{ border: '1px solid #e0e0e0', padding: '16px 12px', fontSize: '14px' }}>
+                    <td style={{ border: '1px solid #e0e0e0', padding: isMobile ? '12px 8px' : '16px 12px', fontSize: '14px' }}>
                       {entry.date}
                     </td>
-                    <td style={{ 
-                      border: '1px solid #e0e0e0', 
-                      padding: '16px 12px', 
+                    <td style={{
+                      border: '1px solid #e0e0e0',
+                      padding: isMobile ? '12px 8px' : '16px 12px',
                       color: '#d32f2f',
                       fontWeight: '600'
                     }}>
                       Rs. {formatAmount(entry.amount)}
                     </td>
-                    <td style={{ 
-                      border: '1px solid #e0e0e0', 
-                      padding: '16px 12px', 
+                    <td style={{
+                      border: '1px solid #e0e0e0',
+                      padding: isMobile ? '12px 8px' : '16px 12px',
                       fontSize: '14px',
                       fontWeight: '600',
                       color: '#b71c1c'
                     }}>
                       Rs. {formatAmount(entry.runningTotal)}
                     </td>
-                    <td style={{ 
-                      border: '1px solid #e0e0e0', 
-                      padding: '16px 12px', 
-                      fontSize: '14px', 
-                      color: '#455a64' 
-                    }}>
+                    <td style={{ border: '1px solid #e0e0e0', padding: isMobile ? '12px 8px' : '16px 12px', fontSize: '14px', color: '#455a64' }}>
                       {entry.note || '-'}
                     </td>
-                    <td style={{ border: '1px solid #e0e0e0', padding: '16px 12px' }}>
-                      <div style={{ display: 'flex', gap: '8px' }}>
+                    <td style={{ border: '1px solid #e0e0e0', padding: isMobile ? '12px 8px' : '16px 12px' }}>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                         <button
                           onClick={() => startEditEntry(entry)}
                           style={{

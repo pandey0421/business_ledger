@@ -15,22 +15,27 @@ const CustomerLedger = ({ customer, onBack }) => {
   const [totalPayment, setTotalPayment] = useState(0);
   const [editingEntry, setEditingEntry] = useState(null);
   const [message, setMessage] = useState('');
-  
-  // Export states
   const [exportStart, setExportStart] = useState('');
   const [exportEnd, setExportEnd] = useState('');
   const [exportLoading, setExportLoading] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
-  // Auto-format date input (20820715 -> 2082-07-15)
+  // Mobile responsive detection
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth <= 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Auto-format date input
   const handleDateChange = (e) => {
-    let value = e.target.value.replace(/[^0-9]/g, ''); // Only numbers
-    // Auto-format: after 4 digits (year) add -, after 6 digits (year-month) add -
+    let value = e.target.value.replace(/[^0-9]/g, '');
     if (value.length >= 4) value = value.slice(0, 4) + '-' + value.slice(4);
     if (value.length >= 7) value = value.slice(0, 7) + '-' + value.slice(7);
     setDate(value);
   };
 
-  // Same for export date inputs
   const handleExportDateChange = (setter) => (e) => {
     let value = e.target.value.replace(/[^0-9]/g, '');
     if (value.length >= 4) value = value.slice(0, 4) + '-' + value.slice(4);
@@ -45,15 +50,13 @@ const CustomerLedger = ({ customer, onBack }) => {
       collection(db, 'customers', customer.id, 'ledger'),
       orderBy('createdAt', 'asc')
     );
-    
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      let chronoData = snapshot.docs.map(d => {
+      let chronoData = snapshot.docs.map((d) => {
         const raw = d.data();
         const amt = Number(raw.amount) || 0;
         return { id: d.id, ...raw, amount: amt };
       });
 
-      // Sort chronologically for balance calculation
       chronoData.sort((a, b) => {
         const da = a.date;
         const dbDate = b.date;
@@ -65,11 +68,10 @@ const CustomerLedger = ({ customer, onBack }) => {
         return ca - cb;
       });
 
-      // Calculate running balances
       let runningBalance = 0;
       let saleSum = 0;
       let paymentSum = 0;
-      chronoData = chronoData.map(entry => {
+      chronoData = chronoData.map((entry) => {
         const amt = entry.amount;
         if (entry.type === 'sale') {
           runningBalance += amt;
@@ -81,7 +83,6 @@ const CustomerLedger = ({ customer, onBack }) => {
         return { ...entry, runningBalance };
       });
 
-      // Reverse for display (newest first)
       const displayData = [...chronoData.reverse()];
       setEntries(displayData);
       setTotalSale(saleSum);
@@ -89,7 +90,7 @@ const CustomerLedger = ({ customer, onBack }) => {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return unsubscribe;
   }, [customer]);
 
   const resetForm = () => {
@@ -103,7 +104,7 @@ const CustomerLedger = ({ customer, onBack }) => {
   const updateCustomerLastActivity = async (activityDate) => {
     try {
       await updateDoc(doc(db, 'customers', customer.id), {
-        ...activityDate && { lastActivityDate: activityDate },
+        ...(activityDate && { lastActivityDate: activityDate }),
         updatedAt: serverTimestamp()
       });
     } catch (err) {
@@ -158,11 +159,9 @@ const CustomerLedger = ({ customer, onBack }) => {
   const handleDeleteEntry = async (entryId) => {
     if (!window.confirm('Are you sure you want to delete this entry?')) return;
     try {
-      const entryToDelete = entries.find(e => e.id === entryId);
       await deleteDoc(doc(db, 'customers', customer.id, 'ledger', entryId));
-      
       if (entries.length === 1) {
-        const remainingEntries = entries.filter(e => e.id !== entryId);
+        const remainingEntries = entries.filter((e) => e.id !== entryId);
         const mostRecentDate = remainingEntries[0]?.date || null;
         await updateCustomerLastActivity(mostRecentDate);
       } else {
@@ -182,7 +181,6 @@ const CustomerLedger = ({ customer, onBack }) => {
     return new Intl.NumberFormat('en-IN').format(num);
   };
 
-  // EXPORT FUNCTIONALITY
   const handleExportPDF = async () => {
     if (!exportStart) {
       setMessage('Please select a start date for export');
@@ -191,8 +189,7 @@ const CustomerLedger = ({ customer, onBack }) => {
     setExportLoading(true);
     setMessage('');
     try {
-      // Filter entries by date range
-      const filteredEntries = entries.filter(entry => {
+      const filteredEntries = entries.filter((entry) => {
         const entryDate = new Date(entry.date);
         const startDate = new Date(exportStart);
         const endDate = exportEnd ? new Date(exportEnd) : new Date('9999-12-31');
@@ -205,29 +202,25 @@ const CustomerLedger = ({ customer, onBack }) => {
         return;
       }
 
-      // Calculate opening balance (entries BEFORE start date)
       const openingBalance = entries
-        .filter(e => new Date(e.date) < new Date(exportStart))
+        .filter((e) => new Date(e.date) < new Date(exportStart))
         .reduce((sum, e) => {
           return e.type === 'sale' ? sum + e.amount : sum - e.amount;
         }, 0);
 
-      // Closing balance (last filtered entry)
       const closingBalance = filteredEntries[filteredEntries.length - 1]?.runningBalance || openingBalance;
 
-      // Totals for period
       const periodSales = filteredEntries
-        .filter(e => e.type === 'sale')
+        .filter((e) => e.type === 'sale')
         .reduce((sum, e) => sum + e.amount, 0);
       const periodPayments = filteredEntries
-        .filter(e => e.type === 'payment')
+        .filter((e) => e.type === 'payment')
         .reduce((sum, e) => sum + e.amount, 0);
 
-      // Prepare PDF data
       const pdfData = {
         entityName: customer.name,
         entityType: 'customer',
-        entries: filteredEntries.sort((a, b) => new Date(a.date) - new Date(b.date)), // Oldest first
+        entries: filteredEntries.sort((a, b) => new Date(a.date) - new Date(b.date)),
         openingBalance,
         closingBalance,
         totalDebit: periodSales,
@@ -236,12 +229,10 @@ const CustomerLedger = ({ customer, onBack }) => {
         generatedDate: new Date().toLocaleDateString('en-IN')
       };
 
-      // Trigger PDF generation
       const success = await exportLedgerToPDF(
         pdfData,
         `${customer.name.replace(/[^a-zA-Z0-9]/g, '')}_ledger_${exportStart}to${exportEnd || 'current'}.pdf`
       );
-
       if (success) {
         setMessage('PDF exported successfully!');
         setExportStart('');
@@ -262,92 +253,118 @@ const CustomerLedger = ({ customer, onBack }) => {
   if (!customer) return null;
 
   return (
-    <div 
-      style={{
-        minHeight: '100vh',
-        background: 'linear-gradient(135deg, #fffde7 0%, #e3f2fd 100%)',
-        display: 'flex',
-        flexDirection: 'column',
-        width: '100vw',
-        margin: 0,
-        padding: '24px',
-        overflowX: 'hidden'
-      }}
-    >
-      <div 
-        style={{
-          maxWidth: '1200px',
-          margin: '0 auto',
-          width: '100%',
-          backgroundColor: '#ffffff',
-          borderRadius: '16px',
-          padding: '32px',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
-          border: '1px solid #e0e0e0'
-        }}
-      >
-        {/* Back Button & Header */}
-        {/* Back Button & Header */}
-<div style={{ display: 'flex', alignItems: 'center', marginBottom: '32px', gap: '16px' }}>
-  <button 
-    onClick={onBack}
-    style={{
-      padding: '12px 20px',
-      borderRadius: '999px',
-      border: '1px solid #cfd8dc',
-      backgroundColor: '#fafafa',
-      cursor: 'pointer',
-      fontSize: '14px',
-      color: '#607d8b',
-      fontWeight: '500'
-    }}
-  >
-    ← Back to Customers
-  </button>
-  <div>
-    <h2 style={{ margin: '0 0 16px 0', color: '#1a237e', fontSize: '32px', fontWeight: 'bold' }}>
-      Ledger for <span style={{ color: '#2e7d32', fontWeight: 'bold' }}>{customer.name}</span>
-    </h2>
-    
-    {/* Bold Colored Totals */}
-    <p style={{ 
-      margin: 0, 
-      fontSize: '18px', 
-      fontWeight: '700',
-      color: '#37474f',
-      lineHeight: '1.4'
+    <div style={{
+      minHeight: '100vh',
+      background: 'linear-gradient(135deg, #fffde7 0%, #e3f2fd 100%)',
+      display: 'flex',
+      flexDirection: 'column',
+      width: '100vw',
+      margin: 0,
+      padding: isMobile ? '0px 12px' : '24px',
+      overflowX: 'hidden',
+      boxSizing: 'border-box'
     }}>
-      <span style={{ color: '#2e7d32', fontWeight: '800' }}>
-        Total Sale: Rs. {formatAmount(totalSale)}
-      </span>
-      {' | '}
-      <span style={{ color: '#c62828', fontWeight: '800' }}>
-        Total Payment: Rs. {formatAmount(totalPayment)}
-      </span>
-      {' | '}
-      <span style={{ 
-        color: balance >= 0 ? '#1b5e20' : '#d32f2f', 
-        fontWeight: '900',
-        fontSize: '20px'
+      <div style={{
+        maxWidth: isMobile ? '100vw' : '1200px',
+        margin: isMobile ? '0' : '0 auto',
+        width: '100%',
+        backgroundColor: '#ffffff',
+        borderRadius: isMobile ? '0' : '16px',
+        padding: isMobile ? '16px' : '32px',
+        boxShadow: isMobile ? 'none' : '0 8px 32px rgba(0,0,0,0.12)',
+        border: isMobile ? 'none' : '1px solid #e0e0e0',
+        boxSizing: 'border-box'
       }}>
-        Balance: Rs. {formatAmount(balance)}
-      </span>
-    </p>
-  </div>
-</div>
+        {/* Back Button + Header */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          marginBottom: isMobile ? '20px' : '32px',
+          gap: isMobile ? '12px' : '16px',
+          flexDirection: isMobile ? 'column' : 'row'
+        }}>
+          <button onClick={onBack} style={{
+            padding: '12px 20px',
+            borderRadius: '999px',
+            border: '1px solid #cfd8dc',
+            backgroundColor: '#fafafa',
+            cursor: 'pointer',
+            fontSize: '14px',
+            color: '#607d8b',
+            fontWeight: '500'
+          }}>
+            ← Back to Customers
+          </button>
+          <div>
+            <h2 style={{
+              margin: '0 0 16px 0',
+              color: '#1a237e',
+              fontSize: isMobile ? '28px' : '32px',
+              fontWeight: 'bold'
+            }}>
+              Ledger for <span style={{ color: '#2e7d32', fontWeight: 'bold' }}>{customer.name}</span>
+            </h2>
+          </div>
+        </div>
 
+        {/* NEW TOTALS CARD DESIGN */}
+        <div style={{
+          marginBottom: isMobile ? '20px' : '24px',
+          padding: isMobile ? '20px 16px' : '24px 28px',
+          background: 'linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%)',
+          borderRadius: '16px',
+          border: '2px solid #4caf50',
+          boxShadow: '0 4px 16px rgba(76, 175, 80, 0.15)'
+        }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3, 1fr)',
+            gap: isMobile ? '16px' : '20px',
+            alignItems: 'end'
+          }}>
+            <div style={{ textAlign: isMobile ? 'center' : 'left' }}>
+              <div style={{ fontSize: isMobile ? '14px' : '16px', fontWeight: '700', color: '#2e7d32', marginBottom: '4px' }}>
+                Total Sale
+              </div>
+              <div style={{ fontSize: isMobile ? '24px' : '28px', fontWeight: '400', color: '#1b5e20' }}>
+                Rs. {formatAmount(totalSale)}
+              </div>
+            </div>
+            <div style={{ textAlign: isMobile ? 'center' : 'left' }}>
+              <div style={{ fontSize: isMobile ? '14px' : '16px', fontWeight: '700', color: '#c62828', marginBottom: '4px' }}>
+                Total Payment
+              </div>
+              <div style={{ fontSize: isMobile ? '24px' : '28px', fontWeight: '400', color: '#b71c1c' }}>
+                Rs. {formatAmount(totalPayment)}
+              </div>
+            </div>
+            <div style={{ textAlign: isMobile ? 'center' : 'right' }}>
+              <div style={{ fontSize: isMobile ? '14px' : '16px', fontWeight: '700', color: '#1976d2', marginBottom: '4px' }}>
+                Balance
+              </div>
+              <div style={{ 
+                fontSize: isMobile ? '24px' : '28px', 
+                fontWeight: '600', 
+                color: balance >= 0 ? '#1b5e20' : '#b71c1c'
+              }}>
+                Rs. {formatAmount(balance)}
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* Add/Edit Form */}
-        <div style={{ 
-          display: 'flex', 
-          gap: '16px', 
-          flexWrap: 'wrap', 
-          marginBottom: '24px', 
-          backgroundColor: '#f5f5f5', 
-          padding: '24px', 
-          borderRadius: '16px' 
+        <div style={{
+          display: 'flex',
+          gap: isMobile ? '12px' : '16px',
+          flexWrap: 'wrap',
+          marginBottom: isMobile ? '20px' : '24px',
+          flexDirection: isMobile ? 'column' : 'row',
+          backgroundColor: '#f5f5f5',
+          padding: isMobile ? '16px' : '24px',
+          borderRadius: '16px'
         }}>
-          <div style={{ flex: '0 0 140px' }}>
+          <div style={{ flex: isMobile ? '1 1 100%' : '0 0 140px' }}>
             <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#37474f', fontSize: '14px' }}>
               Amount *
             </label>
@@ -362,13 +379,14 @@ const CustomerLedger = ({ customer, onBack }) => {
                 borderRadius: '10px',
                 border: '1px solid #cfd8dc',
                 outline: 'none',
-                fontSize: '14px'
+                fontSize: '14px',
+                boxSizing: 'border-box'
               }}
             />
           </div>
-          <div style={{ flex: '0 0 120px' }}>
+          <div style={{ flex: isMobile ? '1 1 100%' : '0 0 120px' }}>
             <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#37474f', fontSize: '14px' }}>
-              Type *
+              Type
             </label>
             <select
               value={type}
@@ -379,16 +397,17 @@ const CustomerLedger = ({ customer, onBack }) => {
                 borderRadius: '10px',
                 border: '1px solid #cfd8dc',
                 backgroundColor: '#fff',
-                fontSize: '14px'
+                fontSize: '14px',
+                boxSizing: 'border-box'
               }}
             >
               <option value="sale">Sale</option>
               <option value="payment">Payment</option>
             </select>
           </div>
-          <div style={{ flex: '0 0 160px' }}>
+          <div style={{ flex: isMobile ? '1 1 100%' : '0 0 160px' }}>
             <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#37474f', fontSize: '14px' }}>
-              Date * (yyyy-mm-dd)
+              Date (yyyy-mm-dd)
             </label>
             <input
               type="text"
@@ -401,11 +420,12 @@ const CustomerLedger = ({ customer, onBack }) => {
                 borderRadius: '10px',
                 border: '1px solid #cfd8dc',
                 outline: 'none',
-                fontSize: '14px'
+                fontSize: '14px',
+                boxSizing: 'border-box'
               }}
             />
           </div>
-          <div style={{ flex: 1, minWidth: '140px' }}>
+          <div style={{ flex: isMobile ? '1 1 100%' : '1', minWidth: isMobile ? 'auto' : '140px' }}>
             <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#37474f', fontSize: '14px' }}>
               Note (optional)
             </label>
@@ -420,12 +440,19 @@ const CustomerLedger = ({ customer, onBack }) => {
                 borderRadius: '10px',
                 border: '1px solid #cfd8dc',
                 outline: 'none',
-                fontSize: '14px'
+                fontSize: '14px',
+                boxSizing: 'border-box'
               }}
             />
           </div>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'end', flexWrap: 'wrap' }}>
-            <button 
+          <div style={{
+            display: 'flex',
+            gap: isMobile ? '8px' : '12px',
+            alignItems: 'end',
+            flexWrap: 'wrap',
+            flex: isMobile ? '1 1 100%' : 'auto'
+          }}>
+            <button
               onClick={addOrUpdateEntry}
               style={{
                 padding: '12px 24px',
@@ -437,13 +464,14 @@ const CustomerLedger = ({ customer, onBack }) => {
                 fontWeight: '600',
                 fontSize: '14px',
                 whiteSpace: 'nowrap',
-                minHeight: '48px'
+                minHeight: '48px',
+                flex: isMobile ? '1 1 100%' : 'auto'
               }}
             >
               {editingEntry ? 'Update Entry' : 'Add Entry'}
             </button>
             {editingEntry && (
-              <button 
+              <button
                 onClick={resetForm}
                 style={{
                   padding: '12px 24px',
@@ -454,7 +482,8 @@ const CustomerLedger = ({ customer, onBack }) => {
                   cursor: 'pointer',
                   fontWeight: '500',
                   fontSize: '14px',
-                  minHeight: '48px'
+                  minHeight: '48px',
+                  flex: isMobile ? '1 1 100%' : 'auto'
                 }}
               >
                 Cancel
@@ -465,11 +494,11 @@ const CustomerLedger = ({ customer, onBack }) => {
 
         {/* Message */}
         {message && (
-          <div style={{ 
-            marginBottom: '24px', 
-            padding: '16px 20px', 
-            borderRadius: '12px', 
-            backgroundColor: '#e3f2fd', 
+          <div style={{
+            marginBottom: isMobile ? '16px' : '24px',
+            padding: '16px 20px',
+            borderRadius: '12px',
+            backgroundColor: '#e3f2fd',
             color: '#1a237e',
             fontSize: '14px',
             border: '1px solid #bbdefb'
@@ -479,17 +508,22 @@ const CustomerLedger = ({ customer, onBack }) => {
         )}
 
         {/* EXPORT SECTION */}
-        <div style={{ 
-          marginBottom: '32px', 
-          padding: '24px', 
-          backgroundColor: '#f0f8ff', 
-          borderRadius: '16px', 
-          border: '2px solid #1e88e5' 
+        <div style={{
+          marginBottom: isMobile ? '24px' : '32px',
+          padding: isMobile ? '16px' : '24px',
+          backgroundColor: '#f0f8ff',
+          borderRadius: '16px',
+          border: '2px solid #1e88e5'
         }}>
-          <h4 style={{ margin: '0 0 20px 0', color: '#1976d2', fontSize: '20px' }}>
+          <h4 style={{ margin: '0 0 20px 0', color: '#1976d2', fontSize: isMobile ? '18px' : '20px' }}>
             Export Ledger to PDF
           </h4>
-          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'end' }}>
+          <div style={{
+            display: 'flex',
+            gap: isMobile ? '12px' : '16px',
+            flexWrap: 'wrap',
+            alignItems: 'end'
+          }}>
             <div>
               <label style={{ display: 'block', fontSize: '13px', color: '#555', marginBottom: '6px', fontWeight: '500' }}>
                 From Date *
@@ -503,8 +537,9 @@ const CustomerLedger = ({ customer, onBack }) => {
                   padding: '12px 16px',
                   borderRadius: '10px',
                   border: '2px solid #1e88e5',
-                  minWidth: '160px',
-                  fontSize: '14px'
+                  minWidth: isMobile ? '140px' : '160px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box'
                 }}
               />
             </div>
@@ -521,12 +556,13 @@ const CustomerLedger = ({ customer, onBack }) => {
                   padding: '12px 16px',
                   borderRadius: '10px',
                   border: '1px solid #cfd8dc',
-                  minWidth: '160px',
-                  fontSize: '14px'
+                  minWidth: isMobile ? '140px' : '160px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box'
                 }}
               />
             </div>
-            <button 
+            <button
               onClick={handleExportPDF}
               disabled={exportLoading || !exportStart}
               style={{
@@ -538,7 +574,9 @@ const CustomerLedger = ({ customer, onBack }) => {
                 cursor: exportLoading || !exportStart ? 'not-allowed' : 'pointer',
                 fontWeight: '600',
                 fontSize: '14px',
-                minHeight: '52px'
+                minHeight: '52px',
+                whiteSpace: 'nowrap',
+                flex: isMobile ? '1 1 100%' : 'auto'
               }}
             >
               {exportLoading ? 'Generating...' : 'Export PDF'}
@@ -557,73 +595,78 @@ const CustomerLedger = ({ customer, onBack }) => {
           </p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table 
-              style={{ 
-                width: '100%', 
-                borderCollapse: 'collapse', 
-                marginTop: '8px',
-                borderRadius: '12px',
-                overflow: 'hidden',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
-              }}
-            >
+            <table style={{
+              width: '100%',
+              borderCollapse: 'collapse',
+              marginTop: '8px',
+              borderRadius: '12px',
+              overflow: 'hidden',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+            }}>
               <thead>
                 <tr style={{ backgroundColor: '#eeeeee' }}>
-                  <th style={{ border: '1px solid #e0e0e0', padding: '16px 12px', fontSize: '14px', fontWeight: '600' }}>Date</th>
-                  <th style={{ border: '1px solid #e0e0e0', padding: '16px 12px', fontSize: '14px', fontWeight: '600' }}>Sale</th>
-                  <th style={{ border: '1px solid #e0e0e0', padding: '16px 12px', fontSize: '14px', fontWeight: '600' }}>Payment</th>
-                  <th style={{ border: '1px solid #e0e0e0', padding: '16px 12px', fontSize: '14px', fontWeight: '600' }}>Balance</th>
-                  <th style={{ border: '1px solid #e0e0e0', padding: '16px 12px', fontSize: '14px', fontWeight: '600' }}>Details</th>
-                  <th style={{ border: '1px solid #e0e0e0', padding: '16px 12px', fontSize: '14px', fontWeight: '600' }}>Actions</th>
+                  <th style={{ border: '1px solid #e0e0e0', padding: isMobile ? '12px 8px' : '16px 12px', fontSize: '14px', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                    Date
+                  </th>
+                  <th style={{ border: '1px solid #e0e0e0', padding: isMobile ? '12px 8px' : '16px 12px', fontSize: '14px', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                    Sale
+                  </th>
+                  <th style={{ border: '1px solid #e0e0e0', padding: isMobile ? '12px 8px' : '16px 12px', fontSize: '14px', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                    Payment
+                  </th>
+                  <th style={{ border: '1px solid #e0e0e0', padding: isMobile ? '12px 8px' : '16px 12px', fontSize: '14px', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                    Balance
+                  </th>
+                  <th style={{ border: '1px solid #e0e0e0', padding: isMobile ? '12px 8px' : '16px 12px', fontSize: '14px', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                    Details
+                  </th>
+                  <th style={{ border: '1px solid #e0e0e0', padding: isMobile ? '12px 8px' : '16px 12px', fontSize: '14px', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {entries.map(entry => (
-                  <tr 
+                {entries.map((entry) => (
+                  <tr
                     key={entry.id}
-                    style={{ 
+                    style={{
                       backgroundColor: entry.id === editingEntry?.id ? '#e3f2fd' : 'transparent',
                       transition: 'background-color 0.2s'
                     }}
                   >
-                    <td style={{ border: '1px solid #e0e0e0', padding: '16px 12px', fontSize: '14px' }}>
+                    <td style={{ border: '1px solid #e0e0e0', padding: isMobile ? '12px 8px' : '16px 12px', fontSize: '14px' }}>
                       {entry.date}
                     </td>
-                    <td style={{ 
-                      border: '1px solid #e0e0e0', 
-                      padding: '16px 12px', 
+                    <td style={{
+                      border: '1px solid #e0e0e0',
+                      padding: isMobile ? '12px 8px' : '16px 12px',
                       color: entry.type === 'sale' ? '#2e7d32' : '#9e9e9e',
                       fontWeight: entry.type === 'sale' ? '600' : '400'
                     }}>
                       {entry.type === 'sale' ? formatAmount(entry.amount) : '-'}
                     </td>
-                    <td style={{ 
-                      border: '1px solid #e0e0e0', 
-                      padding: '16px 12px', 
+                    <td style={{
+                      border: '1px solid #e0e0e0',
+                      padding: isMobile ? '12px 8px' : '16px 12px',
                       color: entry.type === 'payment' ? '#c62828' : '#9e9e9e',
                       fontWeight: entry.type === 'payment' ? '600' : '400'
                     }}>
                       {entry.type === 'payment' ? formatAmount(entry.amount) : '-'}
                     </td>
-                    <td style={{ 
-                      border: '1px solid #e0e0e0', 
-                      padding: '16px 12px', 
+                    <td style={{
+                      border: '1px solid #e0e0e0',
+                      padding: isMobile ? '12px 8px' : '16px 12px',
                       fontSize: '14px',
                       fontWeight: '600',
                       color: entry.runningBalance >= 0 ? '#2e7d32' : '#c62828'
                     }}>
                       Rs. {formatAmount(entry.runningBalance)}
                     </td>
-                    <td style={{ 
-                      border: '1px solid #e0e0e0', 
-                      padding: '16px 12px', 
-                      fontSize: '14px', 
-                      color: '#455a64' 
-                    }}>
+                    <td style={{ border: '1px solid #e0e0e0', padding: isMobile ? '12px 8px' : '16px 12px', fontSize: '14px', color: '#455a64' }}>
                       {entry.note || '-'}
                     </td>
-                    <td style={{ border: '1px solid #e0e0e0', padding: '16px 12px' }}>
-                      <div style={{ display: 'flex', gap: '8px' }}>
+                    <td style={{ border: '1px solid #e0e0e0', padding: isMobile ? '12px 8px' : '16px 12px' }}>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                         <button
                           onClick={() => startEditEntry(entry)}
                           style={{
@@ -663,21 +706,21 @@ const CustomerLedger = ({ customer, onBack }) => {
           </div>
         )}
 
-        {/* HIDDEN PDF TEMPLATE - Only renders when export is triggered */}
+        {/* HIDDEN PDF TEMPLATE */}
         <div style={{ display: 'none' }}>
           <LedgerPDFTemplate
             entityName={customer.name}
             entityType="customer"
-            entries={entries.filter(entry => {
+            entries={entries.filter((entry) => {
               const entryDate = new Date(entry.date);
               const startDate = exportStart ? new Date(exportStart) : null;
               const endDate = exportEnd ? new Date(exportEnd) : new Date('9999-12-31');
               return !startDate || (entryDate >= startDate && entryDate <= endDate);
             })}
-            openingBalance={0} // Calculated in handleExportPDF
-            closingBalance={0} // Calculated in handleExportPDF
-            totalDebit={0} // Calculated in handleExportPDF
-            totalCredit={0} // Calculated in handleExportPDF
+            openingBalance={0}
+            closingBalance={0}
+            totalDebit={0}
+            totalCredit={0}
             dateRange={{ from: exportStart, to: exportEnd }}
             generatedDate={new Date().toLocaleDateString('en-IN')}
           />

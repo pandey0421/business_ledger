@@ -11,12 +11,16 @@ function Suppliers({ goBack }) {
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [editingSupplier, setEditingSupplier] = useState(null);
   const [loadingStats, setLoadingStats] = useState(true);
-  const [overallStats, setOverallStats] = useState({
-    totalPurchases: 0,
-    totalPayments: 0,
-    totalBalance: 0,
-    totalSuppliers: 0
-  });
+  const [overallStats, setOverallStats] = useState({ totalPurchases: 0, totalPayments: 0, totalBalance: 0, totalSuppliers: 0 });
+  const [isMobile, setIsMobile] = useState(false); // Responsive hook
+
+  // Mobile responsive detection
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth <= 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const userId = auth.currentUser?.uid;
   const supplierRef = userId ? collection(db, 'users', userId, 'suppliers') : null;
@@ -42,12 +46,11 @@ function Suppliers({ goBack }) {
     try {
       const snapshot = await getDocs(supplierRef);
       const suppliersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
       let totalPurchases = 0;
       let totalPayments = 0;
-      
+
       for (const supplier of suppliersData) {
-        const ledgerRef = collection(db, 'suppliers', supplier.id, 'ledger'); // Matches existing data
+        const ledgerRef = collection(db, 'suppliers', supplier.id, 'ledger');
         const ledgerSnapshot = await getDocs(ledgerRef);
         let supplierPurchases = 0;
         let supplierPayments = 0;
@@ -78,7 +81,6 @@ function Suppliers({ goBack }) {
     fetchOverallStats();
   }, [userId]);
 
-  // Refresh stats when suppliers change
   useEffect(() => {
     if (suppliers.length > 0) fetchOverallStats();
   }, [suppliers]);
@@ -172,90 +174,99 @@ function Suppliers({ goBack }) {
   }
 
   return (
-    <div 
-      style={{
-        minHeight: '100vh',
-        background: 'linear-gradient(135deg, #fff3e0 0%, #fce4ec 100%)',
-        display: 'flex',
-        flexDirection: 'column',
-        width: '100vw',
-        margin: 0,
-        padding: '24px',
-        overflowX: 'hidden'
-      }}
-    >
-      <div 
-        style={{
-          maxWidth: '1000px',
-          margin: '0 auto',
-          width: '100%',
-          backgroundColor: '#ffffff',
-          borderRadius: '16px',
-          padding: '32px',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
-          border: '1px solid #e0e0e0'
-        }}
-      >
+    <div style={{
+      minHeight: '100vh',
+      background: 'linear-gradient(135deg, #fff3e0 0%, #fce4ec 100%)',
+      display: 'flex',
+      flexDirection: 'column',
+      width: '100vw',
+      margin: 0,
+      padding: isMobile ? '0px 12px' : '24px',
+      overflowX: 'hidden',
+      boxSizing: 'border-box'
+    }}>
+      <div style={{
+        maxWidth: isMobile ? '100vw' : '1000px',
+        margin: isMobile ? '0' : '0 auto',
+        width: '100%',
+        backgroundColor: '#ffffff',
+        borderRadius: isMobile ? '0' : '16px',
+        padding: isMobile ? '16px' : '32px',
+        boxShadow: isMobile ? 'none' : '0 8px 32px rgba(0,0,0,0.12)',
+        border: isMobile ? 'none' : '1px solid #e0e0e0',
+        boxSizing: 'border-box'
+      }}>
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '32px', gap: '16px' }}>
-          <button 
-            onClick={goBack}
-            style={{
-              padding: '8px 16px',
-              borderRadius: '999px',
-              border: '1px solid #cfd8dc',
-              backgroundColor: '#fafafa',
-              cursor: 'pointer',
-              fontSize: '14px',
-              color: '#607d8b'
-            }}
-          >
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          marginBottom: isMobile ? '20px' : '32px',
+          gap: isMobile ? '12px' : '16px',
+          flexDirection: isMobile ? 'column' : 'row'
+        }}>
+          <button onClick={goBack} style={{
+            padding: '8px 16px',
+            borderRadius: '999px',
+            border: '1px solid #cfd8dc',
+            backgroundColor: '#fafafa',
+            cursor: 'pointer',
+            fontSize: '14px',
+            color: '#607d8b'
+          }}>
             ← Back
           </button>
           <div>
-            <h1 style={{ margin: '0 0 8px 0', color: '#1a237e', fontSize: '32px' }}>Suppliers</h1>
-            <p style={{ color: '#546e7a', margin: 0, fontSize: '16px' }}>
+            <h1 style={{ margin: '0 0 8px 0', color: '#1a237e', fontSize: isMobile ? '28px' : '32px' }}>
+              Suppliers
+            </h1>
+            <p style={{ color: '#546e7a', margin: 0, fontSize: isMobile ? '14px' : '16px' }}>
               Manage your suppliers and track payables
             </p>
           </div>
         </div>
 
         {/* Overall Stats Card */}
-        <div style={{ 
-          marginBottom: '32px', 
-          padding: '28px', 
-          background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)', 
-          borderRadius: '16px', 
-          border: '2px solid #fb8c00', 
-          boxShadow: '0 8px 24px rgba(251, 140, 0, 0.15)' 
+        <div style={{
+          marginBottom: isMobile ? '24px' : '32px',
+          padding: isMobile ? '20px' : '28px',
+          background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)',
+          borderRadius: '16px',
+          border: '2px solid #fb8c00',
+          boxShadow: '0 8px 24px rgba(251, 140, 0, 0.15)'
         }}>
-          <h3 style={{ margin: '0 0 20px 0', color: '#ef6c00', fontSize: '24px' }}>Overall Suppliers Summary</h3>
+          <h3 style={{ margin: '0 0 20px 0', color: '#ef6c00', fontSize: isMobile ? '20px' : '24px' }}>
+            Overall Suppliers Summary
+          </h3>
           {loadingStats ? (
             <p style={{ color: '#fb8c00', margin: 0, fontSize: '16px', textAlign: 'center' }}>
               Loading stats...
             </p>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: isMobile ? '12px' : '20px'
+            }}>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '28px', fontWeight: '700', color: '#2e7d32', marginBottom: '8px' }}>
+                <div style={{ fontSize: isMobile ? '24px' : '28px', fontWeight: '700', color: '#2e7d32', marginBottom: '8px' }}>
                   Rs. {formatAmount(overallStats.totalPurchases)}
                 </div>
                 <div style={{ color: '#4caf50', fontSize: '14px' }}>Total Purchases</div>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '28px', fontWeight: '700', color: '#c62828', marginBottom: '8px' }}>
+                <div style={{ fontSize: isMobile ? '24px' : '28px', fontWeight: '700', color: '#c62828', marginBottom: '8px' }}>
                   Rs. {formatAmount(overallStats.totalPayments)}
                 </div>
                 <div style={{ color: '#d32f2f', fontSize: '14px' }}>Total Payments</div>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '28px', fontWeight: '700', color: '#1976d2', marginBottom: '8px' }}>
+                <div style={{ fontSize: isMobile ? '24px' : '28px', fontWeight: '700', color: '#1976d2', marginBottom: '8px' }}>
                   Rs. {formatAmount(overallStats.totalBalance)}
                 </div>
                 <div style={{ color: '#1e88e5', fontSize: '14px' }}>Remaining Balance</div>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '28px', fontWeight: '700', color: '#424242', marginBottom: '8px' }}>
+                <div style={{ fontSize: isMobile ? '24px' : '28px', fontWeight: '700', color: '#424242', marginBottom: '8px' }}>
                   {overallStats.totalSuppliers}
                 </div>
                 <div style={{ color: '#757575', fontSize: '14px' }}>Total Suppliers</div>
@@ -265,16 +276,17 @@ function Suppliers({ goBack }) {
         </div>
 
         {/* Add/Edit Form */}
-        <div style={{ 
-          display: 'flex', 
-          gap: '16px', 
-          flexWrap: 'wrap', 
-          marginBottom: '32px', 
-          backgroundColor: '#f5f5f5', 
-          padding: '24px', 
-          borderRadius: '16px' 
+        <div style={{
+          display: 'flex',
+          gap: isMobile ? '12px' : '16px',
+          flexWrap: 'wrap',
+          marginBottom: isMobile ? '24px' : '32px',
+          flexDirection: isMobile ? 'column' : 'row',
+          backgroundColor: '#f5f5f5',
+          padding: isMobile ? '16px' : '24px',
+          borderRadius: '16px'
         }}>
-          <div style={{ flex: 1, minWidth: '220px' }}>
+          <div style={{ flex: isMobile ? '1 1 100%' : '1 1 220px', minWidth: isMobile ? 'auto' : '220px' }}>
             <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#37474f' }}>
               Supplier Name *
             </label>
@@ -294,11 +306,12 @@ function Suppliers({ goBack }) {
                 borderRadius: '10px',
                 border: editingSupplier && !editingSupplier.name.trim() ? '2px solid #ef5350' : '1px solid #cfd8dc',
                 outline: 'none',
-                fontSize: '14px'
+                fontSize: '14px',
+                boxSizing: 'border-box'
               }}
             />
           </div>
-          <div style={{ flex: 1, minWidth: '220px' }}>
+          <div style={{ flex: isMobile ? '1 1 100%' : '1 1 220px', minWidth: isMobile ? 'auto' : '220px' }}>
             <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#37474f' }}>
               Phone (optional)
             </label>
@@ -318,13 +331,14 @@ function Suppliers({ goBack }) {
                 borderRadius: '10px',
                 border: '1px solid #cfd8dc',
                 outline: 'none',
-                fontSize: '14px'
+                fontSize: '14px',
+                boxSizing: 'border-box'
               }}
             />
           </div>
           {editingSupplier ? (
             <>
-              <button 
+              <button
                 onClick={() => handleUpdateSupplier(editingSupplier.id)}
                 disabled={!editingSupplier.name.trim()}
                 style={{
@@ -336,13 +350,18 @@ function Suppliers({ goBack }) {
                   cursor: editingSupplier.name.trim() ? 'pointer' : 'not-allowed',
                   fontWeight: '500',
                   fontSize: '14px',
-                  whiteSpace: 'nowrap'
+                  whiteSpace: 'nowrap',
+                  flex: isMobile ? '1 1 100%' : '0 0 auto'
                 }}
               >
                 Update Supplier
               </button>
-              <button 
-                onClick={() => { setEditingSupplier(null); setName(''); setPhone(''); }}
+              <button
+                onClick={() => {
+                  setEditingSupplier(null);
+                  setName('');
+                  setPhone('');
+                }}
                 style={{
                   padding: '12px 24px',
                   borderRadius: '10px',
@@ -350,14 +369,15 @@ function Suppliers({ goBack }) {
                   backgroundColor: '#fafafa',
                   color: '#607d8b',
                   cursor: 'pointer',
-                  fontSize: '14px'
+                  fontSize: '14px',
+                  flex: isMobile ? '1 1 100%' : '0 0 auto'
                 }}
               >
                 Cancel
               </button>
             </>
           ) : (
-            <button 
+            <button
               onClick={handleAddSupplier}
               disabled={!name.trim()}
               style={{
@@ -369,7 +389,8 @@ function Suppliers({ goBack }) {
                 cursor: name.trim() ? 'pointer' : 'not-allowed',
                 fontWeight: '500',
                 fontSize: '14px',
-                whiteSpace: 'nowrap'
+                whiteSpace: 'nowrap',
+                flex: isMobile ? '1 1 100%' : '0 0 auto'
               }}
             >
               Add Supplier
@@ -379,11 +400,11 @@ function Suppliers({ goBack }) {
 
         {/* Messages */}
         {message && (
-          <div style={{ 
-            marginBottom: '20px', 
-            padding: '12px 16px', 
-            borderRadius: '10px', 
-            backgroundColor: '#fff3e0', 
+          <div style={{
+            marginBottom: '20px',
+            padding: '12px 16px',
+            borderRadius: '10px',
+            backgroundColor: '#fff3e0',
             color: '#ef6c00',
             fontSize: '14px',
             border: '1px solid #ffe0b2'
@@ -393,36 +414,40 @@ function Suppliers({ goBack }) {
         )}
 
         {/* Supplier List */}
-        <h3 style={{ marginBottom: '24px', color: '#1a237e', fontSize: '24px' }}>
+        <h3 style={{ marginBottom: isMobile ? '20px' : '24px', color: '#1a237e', fontSize: isMobile ? '20px' : '24px' }}>
           Supplier List ({suppliers.length})
         </h3>
-        
         {suppliers.length === 0 ? (
-          <div style={{ 
-            padding: '48px 24px', 
-            textAlign: 'center', 
-            color: '#78909c', 
-            backgroundColor: '#fafafa', 
-            borderRadius: '16px', 
-            border: '1px dashed #cfd8dc' 
+          <div style={{
+            padding: isMobile ? '32px 16px' : '48px 24px',
+            textAlign: 'center',
+            color: '#78909c',
+            backgroundColor: '#fafafa',
+            borderRadius: '16px',
+            border: '1px dashed #cfd8dc'
           }}>
             No suppliers yet. Add your first supplier above.
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '20px' }}>
-            {suppliers.map((s) => (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(360px, 1fr))',
+            gap: isMobile ? '12px' : '20px'
+          }}>
+            {suppliers.map(s => (
               <div
                 key={s.id}
                 style={{
                   borderRadius: '16px',
-                  padding: '24px',
+                  padding: isMobile ? '16px' : '24px',
                   backgroundColor: '#f8f9fa',
                   border: '1px solid #e0e0e0',
                   cursor: 'pointer',
                   transition: 'all 0.3s',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                  boxSizing: 'border-box'
                 }}
-                onClick={() => { setSelectedSupplier({ ...s, userId }); }}
+                onClick={() => setSelectedSupplier({ ...s, userId })}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = 'translateY(-6px)';
                   e.currentTarget.style.boxShadow = '0 12px 32px rgba(239,108,0,0.2)';
@@ -432,17 +457,20 @@ function Suppliers({ goBack }) {
                   e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
                 }}
               >
-                <div style={{ fontSize: '20px', fontWeight: '600', color: '#ef6c00', marginBottom: '12px' }}>
+                <div style={{ fontSize: isMobile ? '18px' : '20px', fontWeight: '600', color: '#ef6c00', marginBottom: '12px' }}>
                   {s.name}
                 </div>
                 {s.phone && (
-                  <div style={{ color: '#546e7a', fontSize: '15px', marginBottom: '16px' }}>
+                  <div style={{ color: '#546e7a', fontSize: isMobile ? '14px' : '15px', marginBottom: '16px' }}>
                     {s.phone}
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                   <button
-                    onClick={(e) => { e.stopPropagation(); startEditSupplier(s); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      startEditSupplier(s);
+                    }}
                     title="Edit Supplier"
                     style={{
                       padding: '8px 12px',
@@ -461,7 +489,10 @@ function Suppliers({ goBack }) {
                     Edit
                   </button>
                   <button
-                    onClick={(e) => { e.stopPropagation(); handleDeleteSupplier(s.id); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteSupplier(s.id);
+                    }}
                     title="Delete Supplier"
                     style={{
                       padding: '8px 12px',
@@ -474,18 +505,18 @@ function Suppliers({ goBack }) {
                       cursor: 'pointer',
                       transition: 'all 0.2s'
                     }}
-                    onMouseEnter={(e) => e.target.style.backgroundColor = '#ffcdd2'}
+                    onMouseEnter={(e) => e.target.style.backgroundColor = '#fcdd2'}
                     onMouseLeave={(e) => e.target.style.backgroundColor = '#ffebee'}
                   >
                     Delete
                   </button>
                 </div>
-                <div style={{ 
-                  marginTop: '16px', 
-                  paddingTop: '16px', 
-                  borderTop: '1px solid #e0e0e0', 
-                  fontSize: '13px', 
-                  color: '#9e9e9e' 
+                <div style={{
+                  marginTop: '16px',
+                  paddingTop: '16px',
+                  borderTop: '1px solid #e0e0e0',
+                  fontSize: '13px',
+                  color: '#9e9e9e'
                 }}>
                   Click card to view ledger
                 </div>
