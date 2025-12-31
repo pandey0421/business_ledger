@@ -42,9 +42,7 @@ const Login = ({ onSuccess }) => {
       if (onSuccess) onSuccess();
     } catch (err) {
       console.error(err);
-      setError(err.message.includes('email-already') 
-        ? 'Email already in use.' 
-        : 'Signup failed. Try again.');
+      setError(err.message.includes('email-already') ? 'Email already in use. Signup failed. Try again.' : err.message);
     } finally {
       setLoading(false);
     }
@@ -56,7 +54,6 @@ const Login = ({ onSuccess }) => {
     setLoading(true);
     try {
       await sendPasswordResetEmail(auth, resetEmail);
-      setError('');
       alert('Password reset email sent! Check your inbox. Check the spam folder if mail not received.');
       setShowReset(false);
       setResetEmail('');
@@ -69,57 +66,57 @@ const Login = ({ onSuccess }) => {
   };
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'linear-gradient(135deg, #e0f7fa 0%, #e8eaf6 100%)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '16px'
-    }}>
-      <div style={{
-        maxWidth: '420px',
-        width: '100%',
-        backgroundColor: '#ffffff',
-        borderRadius: '12px',
-        padding: '24px',
-        boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
-        border: '1px solid #e3f2fd'
-      }}>
+    <div 
+      style={{
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, #e0f7fa 0%, #e8eaf6 100%)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px',
+        margin: 0,
+        width: '100vw',
+        overflowX: 'hidden'
+      }}
+    >
+      <div 
+        style={{
+          maxWidth: '420px',
+          width: '100%',
+          backgroundColor: '#ffffff',
+          borderRadius: '12px',
+          padding: '32px',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+          border: '1px solid #e3f2fd'
+        }}
+      >
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
           <h2 style={{ marginBottom: '8px', color: '#1a237e', fontSize: '28px', fontWeight: 'bold' }}>
             {showSignup ? 'Create Account' : 'Karobar Khata'}
           </h2>
           <p style={{ margin: 0, color: '#607d8b', fontSize: '16px' }}>
-            {showSignup 
-              ? 'Create your account to manage customers and ledgers.' 
-              : 'Sign in to you Karobar Khata account.'
-            }
+            {showSignup ? 'Create your account to manage customers and ledgers.' : 'Sign in to your Karobar Khata account.'}
           </p>
         </div>
 
         {/* Forgot Password Modal */}
         {showReset && (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000
-          }}>
-            <div style={{
-              backgroundColor: '#ffffff',
-              borderRadius: '12px',
-              padding: '24px',
-              maxWidth: '400px',
-              width: '90%'
-            }}>
+          <div 
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000
+            }}
+          >
+            <div style={{ backgroundColor: '#ffffff', borderRadius: '12px', padding: '24px', maxWidth: '400px', width: '90%' }}>
               <h3 style={{ color: '#1a237e', marginBottom: '16px' }}>Reset Password</h3>
               <form onSubmit={handlePasswordReset} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div>
@@ -146,14 +143,7 @@ const Login = ({ onSuccess }) => {
                   />
                 </div>
                 {error && (
-                  <div style={{
-                    padding: '8px 10px',
-                    backgroundColor: '#ffebee',
-                    borderRadius: '6px',
-                    border: '1px solid #ffcdd2',
-                    color: '#d32f2f',
-                    fontSize: '14px'
-                  }}>
+                  <div style={{ padding: '8px 10px', backgroundColor: '#ffebee', borderRadius: '6px', border: '1px solid #ffcdd2', color: '#d32f2f', fontSize: '14px' }}>
                     {error}
                   </div>
                 )}
@@ -213,7 +203,7 @@ const Login = ({ onSuccess }) => {
               style={{
                 marginTop: '4px',
                 width: '100%',
-                padding: '10px 12px',
+                padding: '12px 14px',
                 borderRadius: '8px',
                 border: '1px solid #cfd8dc',
                 outline: 'none',
@@ -239,8 +229,8 @@ const Login = ({ onSuccess }) => {
                 disabled={loading}
                 style={{
                   width: '100%',
-                  padding: '10px 12px',
-                  paddingRight: '40px',
+                  padding: '12px 14px',
+                  paddingRight: '36px',
                   borderRadius: '8px',
                   border: '1px solid #cfd8dc',
                   outline: 'none',
@@ -256,7 +246,7 @@ const Login = ({ onSuccess }) => {
                 disabled={loading}
                 style={{
                   position: 'absolute',
-                  right: '10px',
+                  right: '12px',
                   top: '50%',
                   transform: 'translateY(-50%)',
                   background: 'none',
@@ -277,26 +267,27 @@ const Login = ({ onSuccess }) => {
                 )}
               </button>
             </div>
-            {!showSignup && (
-              <button
-                type="button"
-                onClick={() => setShowReset(true)}
-                disabled={loading}
-                style={{
-                  marginTop: '8px',
-                  padding: 0,
-                  background: 'none',
-                  border: 'none',
-                  color: '#42a5f5',
-                  fontSize: '14px',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  textAlign: 'left'
-                }}
-              >
-                Forgot Password?
-              </button>
-            )}
           </div>
+
+          {!showSignup && (
+            <button
+              type="button"
+              onClick={() => setShowReset(true)}
+              disabled={loading}
+              style={{
+                marginTop: '8px',
+                padding: 0,
+                background: 'none',
+                border: 'none',
+                color: '#42a5f5',
+                fontSize: '14px',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                textAlign: 'left'
+              }}
+            >
+              Forgot Password?
+            </button>
+          )}
 
           {/* Confirm Password Field (Signup only) */}
           {showSignup && (
@@ -313,7 +304,7 @@ const Login = ({ onSuccess }) => {
                 style={{
                   marginTop: '4px',
                   width: '100%',
-                  padding: '10px 12px',
+                  padding: '12px 14px',
                   borderRadius: '8px',
                   border: '1px solid #cfd8dc',
                   outline: 'none',
@@ -328,14 +319,7 @@ const Login = ({ onSuccess }) => {
 
           {/* Error Message */}
           {error && (
-            <div style={{
-              padding: '8px 10px',
-              backgroundColor: '#ffebee',
-              borderRadius: '6px',
-              border: '1px solid #ffcdd2',
-              color: '#d32f2f',
-              fontSize: '14px'
-            }}>
+            <div style={{ padding: '8px 12px', backgroundColor: '#ffebee', borderRadius: '6px', border: '1px solid #ffcdd2', color: '#d32f2f', fontSize: '14px' }}>
               {error}
             </div>
           )}
@@ -346,7 +330,7 @@ const Login = ({ onSuccess }) => {
             disabled={loading}
             style={{
               width: '100%',
-              padding: '10px 14px',
+              padding: '12px 16px',
               borderRadius: '8px',
               border: 'none',
               background: loading 
@@ -362,15 +346,17 @@ const Login = ({ onSuccess }) => {
           >
             {loading ? (
               <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <div style={{
-                  width: '18px',
-                  height: '18px',
-                  border: '2px solid rgba(255,255,255,0.3)',
-                  borderTop: '2px solid #ffffff',
-                  borderRadius: '50%',
-                  animation: 'spin 1s linear infinite',
-                  marginRight: '8px'
-                }} />
+                <div
+                  style={{
+                    width: '18px',
+                    height: '18px',
+                    border: '2px solid rgba(255,255,255,0.3)',
+                    borderTop: '2px solid #ffffff',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite',
+                    marginRight: '8px'
+                  }}
+                />
                 {showSignup ? 'Creating...' : 'Signing in...'}
               </span>
             ) : (
@@ -380,12 +366,7 @@ const Login = ({ onSuccess }) => {
         </form>
 
         {/* Toggle between Login/Signup */}
-        <div style={{
-          textAlign: 'center',
-          marginTop: '24px',
-          paddingTop: '20px',
-          borderTop: '1px solid #e0e0e0'
-        }}>
+        <div style={{ textAlign: 'center', marginTop: '24px', paddingTop: '20px', borderTop: '1px solid #e0e0e0' }}>
           <button
             type="button"
             onClick={() => {
@@ -406,10 +387,7 @@ const Login = ({ onSuccess }) => {
               cursor: loading ? 'not-allowed' : 'pointer'
             }}
           >
-            {showSignup 
-              ? "Already have an account? Login" 
-              : "Don't have an account? Create Account"
-            }
+            {showSignup ? 'Already have an account? Login' : "Don't have an account? Create Account"}
           </button>
         </div>
       </div>
