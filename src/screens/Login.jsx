@@ -223,6 +223,17 @@ const Login = ({ onSuccess }) => {
         role="main"
         aria-label="Login form"
       >
+        <footer
+      style={{
+        marginTop: 16,
+        fontSize: 12,
+        color: "#607d8b",
+        textAlign: "center",
+      }}
+    >
+      © {new Date().getFullYear()} Karobaar Khata. All rights reserved.
+    </footer>
+
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: isMobile ? '24px' : '32px' }}>
           <h2 style={{ 

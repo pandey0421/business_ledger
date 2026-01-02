@@ -275,6 +275,7 @@ const CustomerLedger = ({ customer, onBack }) => {
         border: isMobile ? 'none' : '1px solid #e0e0e0',
         boxSizing: 'border-box'
       }}>
+        
         {/* Back Button + Header */}
         <div style={{
           display: 'flex',
