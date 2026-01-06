@@ -190,9 +190,9 @@ const CustomerLedger = ({ customer, onBack }) => {
     setMessage('');
     try {
       const filteredEntries = entries.filter((entry) => {
-        const entryDate = new Date(entry.date);
-        const startDate = new Date(exportStart);
-        const endDate = exportEnd ? new Date(exportEnd) : new Date('9999-12-31');
+        const entryDate = entry.date; // String yyyy-mm-dd
+        const startDate = exportStart;
+        const endDate = exportEnd || '9999-12-31';
         return entryDate >= startDate && entryDate <= endDate;
       });
 
@@ -203,7 +203,7 @@ const CustomerLedger = ({ customer, onBack }) => {
       }
 
       const openingBalance = entries
-        .filter((e) => new Date(e.date) < new Date(exportStart))
+        .filter((e) => e.date < exportStart)
         .reduce((sum, e) => {
           return e.type === 'sale' ? sum + e.amount : sum - e.amount;
         }, 0);
@@ -275,7 +275,7 @@ const CustomerLedger = ({ customer, onBack }) => {
         border: isMobile ? 'none' : '1px solid #e0e0e0',
         boxSizing: 'border-box'
       }}>
-        
+
         {/* Back Button + Header */}
         <div style={{
           display: 'flex',
@@ -343,9 +343,9 @@ const CustomerLedger = ({ customer, onBack }) => {
               <div style={{ fontSize: isMobile ? '14px' : '16px', fontWeight: '700', color: '#1976d2', marginBottom: '4px' }}>
                 Balance
               </div>
-              <div style={{ 
-                fontSize: isMobile ? '24px' : '28px', 
-                fontWeight: '600', 
+              <div style={{
+                fontSize: isMobile ? '24px' : '28px',
+                fontWeight: '600',
                 color: balance >= 0 ? '#1b5e20' : '#b71c1c'
               }}>
                 Rs. {formatAmount(balance)}

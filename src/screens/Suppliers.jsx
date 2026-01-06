@@ -46,10 +46,9 @@ function Suppliers({ goBack }) {
     try {
       const snapshot = await getDocs(supplierRef);
       const suppliersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      let totalPurchases = 0;
-      let totalPayments = 0;
 
-      for (const supplier of suppliersData) {
+
+      const results = await Promise.all(suppliersData.map(async (supplier) => {
         const ledgerRef = collection(db, 'suppliers', supplier.id, 'ledger');
         const ledgerSnapshot = await getDocs(ledgerRef);
         let supplierPurchases = 0;
@@ -59,9 +58,11 @@ function Suppliers({ goBack }) {
           if (data.type === 'purchase') supplierPurchases += Number(data.amount) || 0;
           if (data.type === 'payment') supplierPayments += Number(data.amount) || 0;
         });
-        totalPurchases += supplierPurchases;
-        totalPayments += supplierPayments;
-      }
+        return { purchases: supplierPurchases, payments: supplierPayments };
+      }));
+
+      const totalPurchases = results.reduce((acc, curr) => acc + curr.purchases, 0);
+      const totalPayments = results.reduce((acc, curr) => acc + curr.payments, 0);
 
       setOverallStats({
         totalPurchases: Math.max(0, totalPurchases),
@@ -138,17 +139,17 @@ function Suppliers({ goBack }) {
       // Delete from both locations to be safe
       const userLedgerRef = collection(db, 'users', userId, 'suppliers', supplierId, 'ledger');
       const globalLedgerRef = collection(db, 'suppliers', supplierId, 'ledger');
-      
+
       const userLedgerSnapshot = await getDocs(userLedgerRef);
       for (const ledgerDoc of userLedgerSnapshot.docs) {
         await deleteDoc(doc(db, 'users', userId, 'suppliers', supplierId, 'ledger', ledgerDoc.id));
       }
-      
+
       const globalLedgerSnapshot = await getDocs(globalLedgerRef);
       for (const ledgerDoc of globalLedgerSnapshot.docs) {
         await deleteDoc(doc(db, 'suppliers', supplierId, 'ledger', ledgerDoc.id));
       }
-      
+
       // Delete supplier
       await deleteDoc(doc(db, 'users', userId, 'suppliers', supplierId));
       setMessage('Supplier deleted successfully');

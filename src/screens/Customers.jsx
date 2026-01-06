@@ -51,9 +51,8 @@ function Customers({ goBack }) {
     try {
       const snapshot = await getDocs(customerRef);
       const customersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      let totalSales = 0;
-      let totalPayments = 0;
-      for (const customer of customersData) {
+
+      const results = await Promise.all(customersData.map(async (customer) => {
         const ledgerRef = collection(db, 'customers', customer.id, 'ledger');
         const ledgerSnapshot = await getDocs(ledgerRef);
         let customerSales = 0;
@@ -63,9 +62,11 @@ function Customers({ goBack }) {
           if (data.type === 'sale') customerSales += Number(data.amount) || 0;
           if (data.type === 'payment') customerPayments += Number(data.amount) || 0;
         });
-        totalSales += customerSales;
-        totalPayments += customerPayments;
-      }
+        return { sales: customerSales, payments: customerPayments };
+      }));
+
+      const totalSales = results.reduce((acc, curr) => acc + curr.sales, 0);
+      const totalPayments = results.reduce((acc, curr) => acc + curr.payments, 0);
       setOverallStats({
         totalSales: Math.max(0, totalSales),
         totalPayments: Math.max(0, totalPayments),

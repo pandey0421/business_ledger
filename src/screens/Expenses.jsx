@@ -45,18 +45,19 @@ function Expenses({ goBack }) {
     try {
       const snapshot = await getDocs(expenseRef);
       const expensesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      let totalExpenses = 0;
 
-      for (const expense of expensesData) {
+
+      const results = await Promise.all(expensesData.map(async (expense) => {
         const ledgerRef = collection(db, 'expenses', expense.id, 'ledger');
         const ledgerSnapshot = await getDocs(ledgerRef);
         let categoryExpenses = 0;
         ledgerSnapshot.docs.forEach(ledgerDoc => {
-          const data = ledgerDoc.data();
-          categoryExpenses += Number(data.amount) || 0;
+          categoryExpenses += Number(ledgerDoc.data().amount) || 0;
         });
-        totalExpenses += categoryExpenses;
-      }
+        return categoryExpenses;
+      }));
+
+      const totalExpenses = results.reduce((a, b) => a + b, 0);
 
       setOverallStats({
         totalExpenses: Math.max(0, totalExpenses),
@@ -127,17 +128,17 @@ function Expenses({ goBack }) {
       // Delete from both user-specific and global ledger paths
       const userLedgerRef = collection(db, 'users', userId, 'expenses', expenseId, 'ledger');
       const globalLedgerRef = collection(db, 'expenses', expenseId, 'ledger');
-      
+
       const userLedgerSnapshot = await getDocs(userLedgerRef);
       for (const ledgerDoc of userLedgerSnapshot.docs) {
         await deleteDoc(doc(db, 'users', userId, 'expenses', expenseId, 'ledger', ledgerDoc.id));
       }
-      
+
       const globalLedgerSnapshot = await getDocs(globalLedgerRef);
       for (const ledgerDoc of globalLedgerSnapshot.docs) {
         await deleteDoc(doc(db, 'expenses', expenseId, 'ledger', ledgerDoc.id));
       }
-      
+
       // Delete expense category
       await deleteDoc(doc(db, 'users', userId, 'expenses', expenseId));
       setMessage('Expense category deleted successfully');

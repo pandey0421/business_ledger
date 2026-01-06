@@ -197,9 +197,9 @@ const SupplierLedger = ({ supplier, onBack }) => {
 
     try {
       const filteredEntries = entries.filter((entry) => {
-        const entryDate = new Date(entry.date);
-        const startDate = new Date(exportStart);
-        const endDate = exportEnd ? new Date(exportEnd) : new Date('9999-12-31');
+        const entryDate = entry.date;
+        const startDate = exportStart;
+        const endDate = exportEnd || '9999-12-31';
         return entryDate >= startDate && entryDate <= endDate;
       });
 
@@ -210,7 +210,7 @@ const SupplierLedger = ({ supplier, onBack }) => {
       }
 
       const openingBalance = entries
-        .filter((e) => new Date(e.date) < new Date(exportStart))
+        .filter((e) => e.date < exportStart)
         .reduce((sum, e) => {
           return e.type === 'purchase' ? sum + e.amount : sum - e.amount;
         }, 0);
@@ -640,53 +640,53 @@ const SupplierLedger = ({ supplier, onBack }) => {
               boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
             }}>
               <thead>
-  <tr style={{ backgroundColor: '#c2bfbfff' }}> {/* WHITE/GRAY header like CustomerLedger */}
-    <th style={{
-  border: '1px solid #e0e0e0',
-  padding: isMobile ? '12px 8px' : '16px 12px',  // ✅ FIXED mobile padding
-  fontSize: '14px',
-  fontWeight: '600',
-  whiteSpace: 'nowrap',
-  backgroundColor: 'eeeeee'  // ✅ WHITE header for ALL sizes
-}}>Date</th>
-<th style={{
-  border: '1px solid #e0e0e0',
-  padding: isMobile ? '12px 8px' : '16px 12px',  // ✅ FIXED mobile padding
-  fontSize: '14px',
-  fontWeight: '600',
-  whiteSpace: 'nowrap',
-  backgroundColor: 'eeeeee'  // ✅ WHITE header for ALL sizes
-}}>Purchase</th>
-    <th style={{
-      border: '1px solid #e0e0e0',
-      padding: isMobile ? '12px 8px 16px 12px' : '16px 12px',
-      fontSize: '14px',
-      fontWeight: '600',
-      whiteSpace: 'nowrap'
-    }}>Payment</th>
-    <th style={{
-      border: '1px solid #e0e0e0',
-      padding: isMobile ? '12px 8px 16px 12px' : '16px 12px',
-      fontSize: '14px',
-      fontWeight: '600',
-      whiteSpace: 'nowrap'
-    }}>Balance</th>
-    <th style={{
-      border: '1px solid #e0e0e0',
-      padding: isMobile ? '12px 8px 16px 12px' : '16px 12px',
-      fontSize: '14px',
-      fontWeight: '600',
-      whiteSpace: 'nowrap'
-    }}>Details</th>
-    <th style={{
-      border: '1px solid #e0e0e0',
-      padding: isMobile ? '12px 8px 16px 12px' : '16px 12px',
-      fontSize: '14px',
-      fontWeight: '600',
-      whiteSpace: 'nowrap'
-    }}>Actions</th>
-  </tr>
-</thead>
+                <tr style={{ backgroundColor: '#c2bfbfff' }}> {/* WHITE/GRAY header like CustomerLedger */}
+                  <th style={{
+                    border: '1px solid #e0e0e0',
+                    padding: isMobile ? '12px 8px' : '16px 12px',  // ✅ FIXED mobile padding
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    whiteSpace: 'nowrap',
+                    backgroundColor: 'eeeeee'  // ✅ WHITE header for ALL sizes
+                  }}>Date</th>
+                  <th style={{
+                    border: '1px solid #e0e0e0',
+                    padding: isMobile ? '12px 8px' : '16px 12px',  // ✅ FIXED mobile padding
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    whiteSpace: 'nowrap',
+                    backgroundColor: 'eeeeee'  // ✅ WHITE header for ALL sizes
+                  }}>Purchase</th>
+                  <th style={{
+                    border: '1px solid #e0e0e0',
+                    padding: isMobile ? '12px 8px 16px 12px' : '16px 12px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    whiteSpace: 'nowrap'
+                  }}>Payment</th>
+                  <th style={{
+                    border: '1px solid #e0e0e0',
+                    padding: isMobile ? '12px 8px 16px 12px' : '16px 12px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    whiteSpace: 'nowrap'
+                  }}>Balance</th>
+                  <th style={{
+                    border: '1px solid #e0e0e0',
+                    padding: isMobile ? '12px 8px 16px 12px' : '16px 12px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    whiteSpace: 'nowrap'
+                  }}>Details</th>
+                  <th style={{
+                    border: '1px solid #e0e0e0',
+                    padding: isMobile ? '12px 8px 16px 12px' : '16px 12px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    whiteSpace: 'nowrap'
+                  }}>Actions</th>
+                </tr>
+              </thead>
 
               <tbody>
                 {entries.map((entry) => (

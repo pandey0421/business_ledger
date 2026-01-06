@@ -183,9 +183,9 @@ const ExpenseLedger = ({ expense, onBack }) => {
     try {
       // Filter entries by date range
       const filteredEntries = entries.filter((entry) => {
-        const entryDate = new Date(entry.date);
-        const startDate = new Date(exportStart);
-        const endDate = exportEnd ? new Date(exportEnd) : new Date('9999-12-31');
+        const entryDate = entry.date;
+        const startDate = exportStart;
+        const endDate = exportEnd || '9999-12-31';
         return entryDate >= startDate && entryDate <= endDate;
       });
 
@@ -197,7 +197,7 @@ const ExpenseLedger = ({ expense, onBack }) => {
 
       // Calculate opening balance (entries BEFORE start date)
       const openingBalance = entries
-        .filter((e) => new Date(e.date) < new Date(exportStart))
+        .filter((e) => e.date < exportStart)
         .reduce((sum, e) => sum + e.amount, 0);
 
       // Closing balance (last filtered entry)

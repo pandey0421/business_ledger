@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   sendPasswordResetEmail,
   sendEmailVerification,
   onAuthStateChanged
@@ -43,13 +43,24 @@ const Login = ({ onSuccess }) => {
   // Rate limiting check
   const canAttemptLogin = useCallback(() => {
     const now = Date.now();
-    if (now - lastAttemptTime > ATTEMPT_WINDOW) {
-      setLoginAttempts(0);
-      setLastAttemptTime(now);
+    const storedAttempts = Number(localStorage.getItem('loginAttempts') || 0);
+    const storedLastAttempt = Number(localStorage.getItem('lastAttemptTime') || 0);
+
+    if (now - storedLastAttempt > ATTEMPT_WINDOW) {
+      localStorage.setItem('loginAttempts', '0');
+      localStorage.setItem('lastAttemptTime', now.toString());
       return true;
     }
-    return loginAttempts < MAX_ATTEMPTS;
-  }, [loginAttempts, lastAttemptTime]);
+    return storedAttempts < MAX_ATTEMPTS;
+  }, []);
+
+  const recordFailedAttempt = () => {
+    const storedAttempts = Number(localStorage.getItem('loginAttempts') || 0);
+    const newAttempts = storedAttempts + 1;
+    localStorage.setItem('loginAttempts', newAttempts.toString());
+    localStorage.setItem('lastAttemptTime', Date.now().toString());
+    setLoginAttempts(newAttempts);
+  };
 
   // Mobile responsive detection
   useEffect(() => {
@@ -65,6 +76,9 @@ const Login = ({ onSuccess }) => {
       if (user) {
         setEmailVerified(user.emailVerified);
         if (user.emailVerified && onSuccess) {
+          // Clear attempts on success
+          localStorage.removeItem('loginAttempts');
+          localStorage.removeItem('lastAttemptTime');
           onSuccess();
         }
       }
@@ -74,9 +88,11 @@ const Login = ({ onSuccess }) => {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    
+
     if (!canAttemptLogin()) {
-      setError(`Too many failed attempts. Try again in ${Math.round((ATTEMPT_WINDOW - (Date.now() - lastAttemptTime)) / 60000)} minutes.`);
+      const storedLastAttempt = Number(localStorage.getItem('lastAttemptTime') || 0);
+      const waitMinutes = Math.round((ATTEMPT_WINDOW - (Date.now() - storedLastAttempt)) / 60000);
+      setError(`Too many failed attempts. Try again in ${Math.max(1, waitMinutes)} minutes.`);
       return;
     }
 
@@ -93,27 +109,17 @@ const Login = ({ onSuccess }) => {
       await signInWithEmailAndPassword(auth, cleanEmail, password);
       // onSuccess will be called by auth listener
     } catch (err) {
-      setLoginAttempts(prev => prev + 1);
-      setLastAttemptTime(Date.now());
-      
-      switch (err.code) {
-        case 'auth/user-not-found':
-          setError('No account found with this email.');
-          break;
-        case 'auth/wrong-password':
-          setError('Incorrect password. Please try again.');
-          break;
-        case 'auth/invalid-email':
-          setError('Please enter a valid email address.');
-          break;
-        case 'auth/user-disabled':
-          setError('This account has been disabled. Contact support.');
-          break;
-        case 'auth/too-many-requests':
-          setError('Too many failed attempts. Try again later.');
-          break;
-        default:
-          setError('Login failed. Please try again.');
+      recordFailedAttempt();
+
+      // Security: Use generic messages to prevent enumeration
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+        setError('Invalid email or password.');
+      } else if (err.code === 'auth/too-many-requests') {
+        setError('Access temporarily disabled due to many failed attempts. Reset your password or try again later.');
+      } else if (err.code === 'auth/user-disabled') {
+        setError('This account has been disabled.');
+      } else {
+        setError('Login failed. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -195,7 +201,7 @@ const Login = ({ onSuccess }) => {
   const clearError = () => setError('');
 
   return (
-    <div 
+    <div
       style={{
         minHeight: '100vh',
         background: 'linear-gradient(135deg, #e0f7fa 0%, #e8eaf6 100%)',
@@ -209,7 +215,7 @@ const Login = ({ onSuccess }) => {
         boxSizing: 'border-box'
       }}
     >
-      <div 
+      <div
         style={{
           maxWidth: isMobile ? '100%' : '420px',
           width: '100%',
@@ -224,40 +230,40 @@ const Login = ({ onSuccess }) => {
         aria-label="Login form"
       >
         <footer
-      style={{
-        marginTop: 16,
-        fontSize: 12,
-        color: "#607d8b",
-        textAlign: "center",
-      }}
-    >
-      © {new Date().getFullYear()} Karobaar Khata. All rights reserved.
-    </footer>
+          style={{
+            marginTop: 16,
+            fontSize: 12,
+            color: "#607d8b",
+            textAlign: "center",
+          }}
+        >
+          © {new Date().getFullYear()} Karobaar Khata. All rights reserved.
+        </footer>
 
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: isMobile ? '24px' : '32px' }}>
-          <h2 style={{ 
-            marginBottom: '8px', 
-            color: '#1a237e', 
-            fontSize: isMobile ? '24px' : '28px', 
-            fontWeight: 'bold' 
+          <h2 style={{
+            marginBottom: '8px',
+            color: '#1a237e',
+            fontSize: isMobile ? '24px' : '28px',
+            fontWeight: 'bold'
           }}>
             {showSignup ? 'Create Account' : 'Karobar Khata'}
           </h2>
-          <p style={{ 
-            margin: 0, 
-            color: '#607d8b', 
-            fontSize: isMobile ? '14px' : '16px' 
+          <p style={{
+            margin: 0,
+            color: '#607d8b',
+            fontSize: isMobile ? '14px' : '16px'
           }}>
-            {showSignup 
-              ? 'Create your account to manage customers and ledgers.' 
+            {showSignup
+              ? 'Create your account to manage customers and ledgers.'
               : 'Sign in to your Karobar Khata account.'
             }
           </p>
           {!emailVerified && (
-            <p style={{ 
-              color: '#ff9800', 
-              fontSize: '12px', 
+            <p style={{
+              color: '#ff9800',
+              fontSize: '12px',
               marginTop: '8px',
               fontWeight: '500'
             }}>
@@ -268,7 +274,7 @@ const Login = ({ onSuccess }) => {
 
         {/* Forgot Password Modal */}
         {showReset && (
-          <div 
+          <div
             style={{
               position: 'fixed',
               top: 0,
@@ -285,7 +291,7 @@ const Login = ({ onSuccess }) => {
             aria-modal="true"
             aria-labelledby="reset-title"
           >
-            <div 
+            <div
               style={{
                 backgroundColor: '#ffffff',
                 borderRadius: '12px',
@@ -295,12 +301,12 @@ const Login = ({ onSuccess }) => {
                 boxSizing: 'border-box'
               }}
             >
-              <h3 
+              <h3
                 id="reset-title"
-                style={{ 
-                  color: '#1a237e', 
-                  marginBottom: '16px', 
-                  fontSize: isMobile ? '20px' : '22px' 
+                style={{
+                  color: '#1a237e',
+                  marginBottom: '16px',
+                  fontSize: isMobile ? '20px' : '22px'
                 }}
               >
                 Reset Password
@@ -310,11 +316,11 @@ const Login = ({ onSuccess }) => {
                   <label style={{ fontSize: '14px', color: '#455a64', display: 'block', marginBottom: '4px' }}>
                     Email
                   </label>
-                  <input 
-                    type="email" 
-                    value={resetEmail} 
+                  <input
+                    type="email"
+                    value={resetEmail}
                     onChange={(e) => setResetEmail(sanitizeInput(e.target.value))}
-                    required 
+                    required
                     disabled={loading}
                     style={{
                       width: '100%',
@@ -331,31 +337,31 @@ const Login = ({ onSuccess }) => {
                     aria-describedby={error ? "reset-error" : undefined}
                   />
                 </div>
-                
+
                 {error && (
-                  <div 
+                  <div
                     id="reset-error"
-                    style={{ 
-                      padding: '8px 10px', 
-                      backgroundColor: '#ffebee', 
-                      borderRadius: '6px', 
-                      border: '1px solid #ffccdd', 
-                      color: '#d32f2f', 
-                      fontSize: '14px' 
+                    style={{
+                      padding: '8px 10px',
+                      backgroundColor: '#ffebee',
+                      borderRadius: '6px',
+                      border: '1px solid #ffccdd',
+                      color: '#d32f2f',
+                      fontSize: '14px'
                     }}
                   >
                     {error}
                   </div>
                 )}
-                
+
                 <div style={{ display: 'flex', gap: '12px' }}>
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     onClick={() => {
                       setShowReset(false);
                       setResetEmail('');
                       setError('');
-                    }} 
+                    }}
                     disabled={loading}
                     style={{
                       flex: 1,
@@ -371,16 +377,16 @@ const Login = ({ onSuccess }) => {
                   >
                     Cancel
                   </button>
-                  <button 
-                    type="submit" 
+                  <button
+                    type="submit"
                     disabled={loading}
                     style={{
                       flex: 1,
                       padding: '10px',
                       borderRadius: '8px',
                       border: 'none',
-                      background: loading 
-                        ? 'linear-gradient(135deg, #bdbdbd 0%, #e0e0e0 100%)' 
+                      background: loading
+                        ? 'linear-gradient(135deg, #bdbdbd 0%, #e0e0e0 100%)'
                         : 'linear-gradient(135deg, #42a5f5 0%, #5c6bc0 100%)',
                       color: '#ffffff',
                       fontWeight: 600,
@@ -397,7 +403,7 @@ const Login = ({ onSuccess }) => {
         )}
 
         {/* Main Form */}
-        <form 
+        <form
           onSubmit={showSignup ? handleSignup : handleLogin}
           style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '16px' : '20px' }}
           noValidate
@@ -407,11 +413,11 @@ const Login = ({ onSuccess }) => {
             <label style={{ fontSize: '14px', color: '#455a64', display: 'block', marginBottom: '4px' }}>
               Email
             </label>
-            <input 
-              type="email" 
-              value={email} 
+            <input
+              type="email"
+              value={email}
               onChange={(e) => setEmail(sanitizeInput(e.target.value))}
-              required 
+              required
               disabled={loading}
               style={{
                 marginTop: '4px',
@@ -436,11 +442,11 @@ const Login = ({ onSuccess }) => {
               Password
             </label>
             <div style={{ position: 'relative' }}>
-              <input 
-                type={showPassword ? 'text' : 'password'} 
-                value={password} 
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                required 
+                required
                 disabled={loading}
                 style={{
                   width: '100%',
@@ -456,7 +462,7 @@ const Login = ({ onSuccess }) => {
                 }}
                 placeholder="Enter your password"
               />
-              <button 
+              <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 disabled={loading}
@@ -494,11 +500,11 @@ const Login = ({ onSuccess }) => {
                 Confirm Password
               </label>
               <div style={{ position: 'relative' }}>
-                <input 
-                  type={showPassword ? 'text' : 'password'} 
-                  value={confirmPassword} 
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  required 
+                  required
                   disabled={loading}
                   style={{
                     marginTop: '4px',
@@ -515,7 +521,7 @@ const Login = ({ onSuccess }) => {
                   }}
                   placeholder="Confirm your password"
                 />
-                <button 
+                <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   disabled={loading}
@@ -548,21 +554,21 @@ const Login = ({ onSuccess }) => {
 
           {/* Error Message */}
           {error && (
-            <div 
+            <div
               id="login-error"
-              style={{ 
-                padding: '8px 12px', 
-                backgroundColor: '#ffebee', 
-                borderRadius: '6px', 
-                border: '1px solid #ffccdd', 
-                color: '#d32f2f', 
+              style={{
+                padding: '8px 12px',
+                backgroundColor: '#ffebee',
+                borderRadius: '6px',
+                border: '1px solid #ffccdd',
+                color: '#d32f2f',
                 fontSize: '14px',
                 animation: 'fadeIn 0.3s ease-in'
               }}
               role="alert"
             >
               {error}
-              <button 
+              <button
                 onClick={clearError}
                 style={{
                   marginLeft: '8px',
@@ -581,16 +587,16 @@ const Login = ({ onSuccess }) => {
           )}
 
           {/* Submit Button */}
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={loading || !canAttemptLogin()}
             style={{
               width: '100%',
               padding: '12px 16px',
               borderRadius: '8px',
               border: 'none',
-              background: loading || !canAttemptLogin() 
-                ? 'linear-gradient(135deg, #bdbdbd 0%, #e0e0e0 100%)' 
+              background: loading || !canAttemptLogin()
+                ? 'linear-gradient(135deg, #bdbdbd 0%, #e0e0e0 100%)'
                 : 'linear-gradient(135deg, #42a5f5 0%, #5c6bc0 100%)',
               color: '#ffffff',
               fontWeight: 600,
@@ -604,7 +610,7 @@ const Login = ({ onSuccess }) => {
           >
             {loading ? (
               <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <div 
+                <div
                   style={{
                     width: '18px',
                     height: '18px',
@@ -623,7 +629,7 @@ const Login = ({ onSuccess }) => {
 
         {/* Toggle between Login/Signup */}
         <div style={{ textAlign: 'center', marginTop: isMobile ? '20px' : '24px', paddingTop: '20px', borderTop: '1px solid #e0e0e0' }}>
-          <button 
+          <button
             type="button"
             onClick={() => {
               setShowSignup(!showSignup);
@@ -645,9 +651,9 @@ const Login = ({ onSuccess }) => {
           >
             {showSignup ? 'Already have an account? Login' : "Don't have an account? Create Account"}
           </button>
-          
+
           {!showSignup && (
-            <button 
+            <button
               type="button"
               onClick={() => setShowReset(true)}
               disabled={loading}

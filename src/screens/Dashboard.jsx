@@ -10,7 +10,8 @@ function Dashboard({ onSelect }) {
     totalExpenses: 0,
     totalCustomers: 0,
     totalSuppliers: 0,
-    totalExpenseCategories: 0
+    totalExpenseCategories: 0,
+    netProfit: 0
   });
   const [loading, setLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
@@ -29,55 +30,90 @@ function Dashboard({ onSelect }) {
     if (!userId) return;
     setLoading(true);
     try {
-      // Fetch customer stats
+      // 1. Fetch ALL Customers (list) first
       const customersRef = collection(db, 'users', userId, 'customers');
       const customersSnapshot = await getDocs(customersRef);
       const customers = customersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      let totalReceivables = 0;
-      for (const customer of customers) {
-        const ledgerRef = collection(db, 'customers', customer.id, 'ledger');
-        const ledgerSnapshot = await getDocs(ledgerRef);
-        let customerSales = 0;
-        let customerPayments = 0;
-        ledgerSnapshot.docs.forEach(doc => {
-          const data = doc.data();
-          if (data.type === 'sale') customerSales += Number(data.amount) || 0;
-          if (data.type === 'payment') customerPayments += Number(data.amount) || 0;
-        });
-        totalReceivables += customerSales - customerPayments;
-      }
 
-      // Fetch supplier stats
+      // 2. Fetch ALL Suppliers (list)
       const suppliersRef = collection(db, 'users', userId, 'suppliers');
       const suppliersSnapshot = await getDocs(suppliersRef);
       const suppliers = suppliersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      let totalPayables = 0;
-      for (const supplier of suppliers) {
-        const ledgerRef = collection(db, 'suppliers', supplier.id, 'ledger');
-        const ledgerSnapshot = await getDocs(ledgerRef);
-        let supplierPurchases = 0;
-        let supplierPayments = 0;
-        ledgerSnapshot.docs.forEach(doc => {
-          const data = doc.data();
-          if (data.type === 'purchase') supplierPurchases += Number(data.amount) || 0;
-          if (data.type === 'payment') supplierPayments += Number(data.amount) || 0;
-        });
-        totalPayables += supplierPurchases - supplierPayments;
-      }
 
-      // Fetch expenses stats
+      // 3. Fetch ALL Expenses (list)
       const expensesRef = collection(db, 'users', userId, 'expenses');
       const expensesSnapshot = await getDocs(expensesRef);
       const expenses = expensesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      let totalExpenses = 0;
-      for (const expense of expenses) {
-        const ledgerRef = collection(db, 'expenses', expense.id, 'ledger');
+
+      // Parallelize Ledger Fetches for Customers
+      const customerPromises = customers.map(async (customer) => {
+        const ledgerRef = collection(db, 'customers', customer.id, 'ledger');
         const ledgerSnapshot = await getDocs(ledgerRef);
+        let sales = 0;
+        let payments = 0;
         ledgerSnapshot.docs.forEach(doc => {
           const data = doc.data();
-          totalExpenses += Number(data.amount) || 0;
+          const amount = Number(data.amount) || 0;
+          if (data.type === 'sale') sales += amount;
+          if (data.type === 'payment') payments += amount;
         });
-      }
+        return { sales, payments, receivable: sales - payments };
+      });
+
+      // Parallelize Ledger Fetches for Suppliers
+      const supplierPromises = suppliers.map(async (supplier) => {
+        const ledgerRef = collection(db, 'suppliers', supplier.id, 'ledger');
+        const ledgerSnapshot = await getDocs(ledgerRef);
+        let purchases = 0;
+        let payments = 0;
+        ledgerSnapshot.docs.forEach(doc => {
+          const data = doc.data();
+          const amount = Number(data.amount) || 0;
+          if (data.type === 'purchase') purchases += amount;
+          if (data.type === 'payment') payments += amount;
+        });
+        return { purchases, payments, payable: purchases - payments };
+      });
+
+      // Parallelize Ledger Fetches for Expenses
+      const expensePromises = expenses.map(async (expense) => {
+        const ledgerRef = collection(db, 'expenses', expense.id, 'ledger');
+        const ledgerSnapshot = await getDocs(ledgerRef);
+        let expTotal = 0;
+        ledgerSnapshot.docs.forEach(doc => {
+          const amount = Number(doc.data().amount) || 0;
+          expTotal += amount;
+        });
+        return expTotal;
+      });
+
+      // Await all
+      const [customerResults, supplierResults, expenseResults] = await Promise.all([
+        Promise.all(customerPromises),
+        Promise.all(supplierPromises),
+        Promise.all(expensePromises)
+      ]);
+
+      // Aggregate
+      let totalReceivables = 0;
+      let totalSales = 0;
+      customerResults.forEach(r => {
+        totalReceivables += r.receivable;
+        totalSales += r.sales;
+      });
+
+      let totalPayables = 0;
+      let totalPurchases = 0;
+      supplierResults.forEach(r => {
+        totalPayables += r.payable;
+        totalPurchases += r.purchases;
+      });
+
+      const totalExpenses = expenseResults.reduce((a, b) => a + b, 0);
+
+      // Correct Net Profit: Sales - Purchases - Expenses
+      // Note: This assumes 'Sales' are revenue and 'Purchases' are COGS.
+      const calculatedNetProfit = totalSales - totalPurchases - totalExpenses;
 
       setStats({
         totalReceivables: Math.max(0, totalReceivables),
@@ -85,8 +121,10 @@ function Dashboard({ onSelect }) {
         totalExpenses: Math.max(0, totalExpenses),
         totalCustomers: customers.length,
         totalSuppliers: suppliers.length,
-        totalExpenseCategories: expenses.length
+        totalExpenseCategories: expenses.length,
+        netProfit: calculatedNetProfit
       });
+
     } catch (err) {
       console.error('Failed to fetch stats', err);
     } finally {
@@ -110,41 +148,41 @@ function Dashboard({ onSelect }) {
     return new Intl.NumberFormat('en-IN').format(Math.round(num));
   };
 
-  const netProfit = stats.totalReceivables - stats.totalPayables - stats.totalExpenses;
+  const netProfit = stats.netProfit;
 
   // 🎯 PERFECT DESKTOP + MOBILE STYLES
   const containerStyle = {
-  minHeight: '100vh',
-  background: 'linear-gradient(135deg, #f1f8e9 0%, #e3f2fd 100%)',
-  display: 'flex',
-  flexDirection: 'column',
-  width: '100vw',
-  margin: 0,
-  padding: isMobile ? '4px' : '24px',  // ONLY mobile padding reduced
-  overflowX: 'hidden',
-  boxSizing: 'border-box'
+    minHeight: '100vh',
+    background: 'linear-gradient(135deg, #f1f8e9 0%, #e3f2fd 100%)',
+    display: 'flex',
+    flexDirection: 'column',
+    width: '100vw',
+    margin: 0,
+    padding: isMobile ? '4px' : '24px',  // ONLY mobile padding reduced
+    overflowX: 'hidden',
+    boxSizing: 'border-box'
   };
 
   const mainCardStyle = {
-  maxWidth: isMobile ? 'calc(100vw - 8px)' : '1200px',  // Mobile: viewport minus padding
-  margin: '0 auto',
-  width: '100%',
-  backgroundColor: '#ffffff',
-  borderRadius: isMobile ? '8px' : '16px',              // Smaller radius mobile
-  padding: isMobile ? '20px' : '32px',
-  boxShadow: isMobile ? '0 4px 16px rgba(0,0,0,0.08)' : '0 8px 32px rgba(0,0,0,0.12)',
-  border: isMobile ? '1px solid #e0e0e0' : '1px solid #e0e0e0',
-  boxSizing: 'border-box'
+    maxWidth: isMobile ? 'calc(100vw - 8px)' : '1200px',  // Mobile: viewport minus padding
+    margin: '0 auto',
+    width: '100%',
+    backgroundColor: '#ffffff',
+    borderRadius: isMobile ? '8px' : '16px',              // Smaller radius mobile
+    padding: isMobile ? '20px' : '32px',
+    boxShadow: isMobile ? '0 4px 16px rgba(0,0,0,0.08)' : '0 8px 32px rgba(0,0,0,0.12)',
+    border: isMobile ? '1px solid #e0e0e0' : '1px solid #e0e0e0',
+    boxSizing: 'border-box'
   };
 
   const headerStyle = {
-  display: 'flex',
-  justifyContent: isMobile ? 'center' : 'space-between',  // Desktop unchanged
-  alignItems: isMobile ? 'flex-start' : 'center',
-  marginBottom: isMobile ? '20px' : '32px',
-  gap: isMobile ? '12px' : '0',                          // Desktop gap 0
-  flexDirection: isMobile ? 'column' : 'row',
-  boxSizing: 'border-box'              // Desktop row
+    display: 'flex',
+    justifyContent: isMobile ? 'center' : 'space-between',  // Desktop unchanged
+    alignItems: isMobile ? 'flex-start' : 'center',
+    marginBottom: isMobile ? '20px' : '32px',
+    gap: isMobile ? '12px' : '0',                          // Desktop gap 0
+    flexDirection: isMobile ? 'column' : 'row',
+    boxSizing: 'border-box'              // Desktop row
   };
 
   const titleStyle = {
@@ -175,22 +213,22 @@ function Dashboard({ onSelect }) {
   };
 
   const actionCardsStyle = {
-  display: 'grid',
-  gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(280px, 1fr))',  // Desktop grid preserved
-  gap: isMobile ? '16px' : '24px',
-  marginBottom: isMobile ? '28px' : '40px'
+    display: 'grid',
+    gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(280px, 1fr))',  // Desktop grid preserved
+    gap: isMobile ? '16px' : '24px',
+    marginBottom: isMobile ? '28px' : '40px'
   };
 
   const cardStyle = (hoverColor) => ({
-  background: `linear-gradient(135deg, ${hoverColor[0]} 0%, ${hoverColor[1]} 100%)`,
-  borderRadius: '16px',
-  padding: isMobile ? '20px' : '24px',                    // Slightly less mobile padding
-  boxShadow: '0 6px 20px rgba(0,0,0,0.08)',
-  border: '1px solid transparent',
-  cursor: 'pointer',
-  transition: 'all 0.3s',
-  display: 'flex',
-  flexDirection: 'column'
+    background: `linear-gradient(135deg, ${hoverColor[0]} 0%, ${hoverColor[1]} 100%)`,
+    borderRadius: '16px',
+    padding: isMobile ? '20px' : '24px',                    // Slightly less mobile padding
+    boxShadow: '0 6px 20px rgba(0,0,0,0.08)',
+    border: '1px solid transparent',
+    cursor: 'pointer',
+    transition: 'all 0.3s',
+    display: 'flex',
+    flexDirection: 'column'
   });
 
   const cardTitleStyle = {
@@ -210,9 +248,9 @@ function Dashboard({ onSelect }) {
   };
 
   const summaryStyle = {
-  display: 'grid',
-  gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(260px, 1fr))',  // Desktop grid preserved
-  gap: isMobile ? '16px' : '24px'
+    display: 'grid',
+    gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(260px, 1fr))',  // Desktop grid preserved
+    gap: isMobile ? '16px' : '24px'
   };
 
   const summaryCardStyle = (bgGradient, borderColor) => ({
