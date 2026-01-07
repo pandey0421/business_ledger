@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useRef, useEffect, useState } from "react"; // Added useRef
 import { onAuthStateChanged } from "firebase/auth";
-import { auth } from "./firebase";
+import { auth, db } from "./firebase";
+import { doc, getDoc } from "firebase/firestore";
 import { Toaster, toast } from 'react-hot-toast';
+import { App as CapacitorApp } from '@capacitor/app'; // Import Capacitor App
 
 import Login from "./screens/Login";
 import Dashboard from "./screens/Dashboard";
@@ -10,6 +12,8 @@ import Suppliers from "./screens/Suppliers";
 import Expenses from "./screens/Expenses";
 import Privacy from "./screens/Privacy";
 import Terms from "./screens/Terms";
+import Subscription from "./screens/Subscription";
+import Landing from "./screens/Landing";
 
 import Footer from "./components/Footer";
 import Spinner from "./components/Spinner";
@@ -19,8 +23,75 @@ import { signOut } from "firebase/auth";
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [screen, setScreen] = useState("dashboard");
+
+  // Initialize screen strictly from hash
+  const getScreenFromHash = () => {
+    const hash = window.location.hash.slice(1); // Remove #
+    const [route] = hash.split('/');
+    const VALID_SCREENS = ["dashboard", "customers", "suppliers", "expenses", "privacy", "terms"];
+    return VALID_SCREENS.includes(route) ? route : "dashboard";
+  };
+
+  const [screen, setScreen] = useState(getScreenFromHash());
+
+  const [showLogin, setShowLogin] = useState(() => {
+    // Skip landing if user has visited before
+    return localStorage.getItem('intro_seen') === 'true';
+  });
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
+
+  // Subscription State
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [checkingSub, setCheckingSub] = useState(false);
+
+  // Sync State <-> Hash
+  useEffect(() => {
+    // 1. Listen for External Hash Changes (Browser Back/Forward)
+    const handleHashChange = () => {
+      const newScreen = getScreenFromHash();
+      if (newScreen !== screen) {
+        setScreen(newScreen);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+
+    // 2. Sync URL when Internal State Changes
+    // Only update hash if it's different to prevent loops/overwrite on load
+    const currentHashRoute = window.location.hash.slice(1).split('/')[0];
+    if (screen !== 'dashboard' && screen !== currentHashRoute) {
+      window.location.hash = screen;
+    } else if (screen === 'dashboard' && currentHashRoute !== '' && currentHashRoute !== 'dashboard') {
+      // If we moved to dashboard, clear hash or set #dashboard
+      window.location.hash = 'dashboard';
+    }
+
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [screen]);
+
+  // Handle Capacitor Hardware Back Button
+  useEffect(() => {
+    let backListener;
+    const setupBackListener = async () => {
+      backListener = await CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+        const currentScreen = getScreenFromHash();
+
+        if (currentScreen === 'dashboard') {
+          // At root/dashboard -> Exit App
+          CapacitorApp.exitApp();
+        } else {
+          // At any other screen -> Go Dashboard
+          setScreen('dashboard');
+          window.location.hash = 'dashboard';
+        }
+      });
+    };
+
+    setupBackListener();
+
+    return () => {
+      if (backListener) backListener.remove();
+    };
+  }, []);
 
   // Offline detection
   useEffect(() => {
@@ -73,16 +144,47 @@ function App() {
     };
   }, [user]);
 
+  // Auth & Subscription Check
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+
+      if (currentUser) {
+        setCheckingSub(true);
+        try {
+          const userRef = doc(db, 'users', currentUser.uid);
+          const userSnap = await getDoc(userRef);
+
+          if (userSnap.exists()) {
+            const data = userSnap.data();
+            const expiry = data.subscriptionExpiry?.toDate();
+
+            if (expiry && expiry > new Date()) {
+              setIsSubscribed(true);
+            } else {
+              setIsSubscribed(false);
+              // For now: Hard block if no active subscription
+            }
+          } else {
+            // New user or no record -> Not subscribed
+            setIsSubscribed(false);
+          }
+        } catch (e) {
+          console.error("Sub check failed", e);
+        } finally {
+          setCheckingSub(false);
+        }
+      } else {
+        setCheckingSub(false);
+      }
+
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
-  if (loading) return (
+  if (loading || checkingSub) return (
     <div style={{
       display: 'flex',
       justifyContent: 'center',
@@ -92,12 +194,43 @@ function App() {
       gap: '20px'
     }}>
       <Spinner size={50} />
-      <p style={{ color: '#607d8b', fontFamily: 'sans-serif' }}>Loading Karobar Khata...</p>
+      <p style={{ color: '#607d8b', fontFamily: 'sans-serif' }}>
+        {checkingSub ? "Verifying Subscription..." : "Loading Karobar Khata..."}
+      </p>
     </div>
   );
 
   const renderScreen = () => {
-    if (!user) return <Login onSuccess={() => setScreen("dashboard")} />;
+    if (!user) {
+      if (showLogin) {
+        return <Login onSuccess={() => {
+          const hash = window.location.hash.slice(1);
+          const [route] = hash.split('/');
+          setScreen(route || "dashboard");
+        }} />;
+      } else {
+        return <Landing onGetStarted={() => {
+          localStorage.setItem('intro_seen', 'true');
+          setShowLogin(true);
+        }} />;
+      }
+    }
+
+    // SUBSCRIPTION GATE - TEMPORARILY DISABLED
+    // If not subscribed, user can ONLY access 'subscription' (or privacy/terms)
+    /*
+    if (!isSubscribed) {
+       // Allow legal pages
+       if (screen === 'privacy') return <Privacy goBack={() => setScreen("dashboard")} />;
+       if (screen === 'terms') return <Terms goBack={() => setScreen("dashboard")} />;
+       
+       // Force subscription screen for everything else
+       return <Subscription onSuccess={() => {
+         setIsSubscribed(true);
+         setScreen("dashboard");
+       }} />;
+    }
+    */
 
     switch (screen) {
       case "dashboard":

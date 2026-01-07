@@ -317,19 +317,25 @@ function Dashboard({ onSelect }) {
             style={cardStyle(['#e3f2fd', '#e8eaf6'])}
             onClick={() => onSelect('customers')}
             onMouseEnter={(e) => {
-              e.target.style.transform = 'translateY(-4px)';
-              e.target.style.boxShadow = '0 12px 40px rgba(30, 136, 229, 0.2)';
+              e.currentTarget.style.transform = 'translateY(-4px)';
+              e.currentTarget.style.boxShadow = '0 12px 40px rgba(30, 136, 229, 0.2)';
             }}
             onMouseLeave={(e) => {
-              e.target.style.transform = 'none';
-              e.target.style.boxShadow = '0 6px 20px rgba(0,0,0,0.08)';
+              e.currentTarget.style.transform = 'none';
+              e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.08)';
             }}
           >
             <h3 style={{ ...cardTitleStyle, color: '#1e88e5' }}>Customers</h3>
             <p style={{ fontSize: '14px', color: '#546e7a', marginBottom: '20px' }}>
               Manage customers and track receivables
             </p>
-            <button style={{ ...cardButtonStyle, backgroundColor: '#42a5f5', color: '#fff' }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect('customers');
+              }}
+              style={{ ...cardButtonStyle, backgroundColor: '#42a5f5', color: '#fff' }}
+            >
               Open Customers
             </button>
           </div>
@@ -339,19 +345,25 @@ function Dashboard({ onSelect }) {
             style={cardStyle(['#fff3e0', '#fff8e1'])}
             onClick={() => onSelect('suppliers')}
             onMouseEnter={(e) => {
-              e.target.style.transform = 'translateY(-4px)';
-              e.target.style.boxShadow = '0 12px 40px rgba(239, 108, 0, 0.2)';
+              e.currentTarget.style.transform = 'translateY(-4px)';
+              e.currentTarget.style.boxShadow = '0 12px 40px rgba(239, 108, 0, 0.2)';
             }}
             onMouseLeave={(e) => {
-              e.target.style.transform = 'none';
-              e.target.style.boxShadow = '0 6px 20px rgba(0,0,0,0.08)';
+              e.currentTarget.style.transform = 'none';
+              e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.08)';
             }}
           >
             <h3 style={{ ...cardTitleStyle, color: '#ef6c00' }}>Suppliers</h3>
             <p style={{ fontSize: '14px', color: '#546e7a', marginBottom: '20px' }}>
               Manage suppliers and track payables
             </p>
-            <button style={{ ...cardButtonStyle, backgroundColor: '#fb8c00', color: '#fff' }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect('suppliers');
+              }}
+              style={{ ...cardButtonStyle, backgroundColor: '#fb8c00', color: '#fff' }}
+            >
               Open Suppliers
             </button>
           </div>
@@ -361,19 +373,25 @@ function Dashboard({ onSelect }) {
             style={cardStyle(['#ffebee', '#ffcdd2'])}
             onClick={() => onSelect('expenses')}
             onMouseEnter={(e) => {
-              e.target.style.transform = 'translateY(-4px)';
-              e.target.style.boxShadow = '0 12px 40px rgba(244, 67, 54, 0.2)';
+              e.currentTarget.style.transform = 'translateY(-4px)';
+              e.currentTarget.style.boxShadow = '0 12px 40px rgba(244, 67, 54, 0.2)';
             }}
             onMouseLeave={(e) => {
-              e.target.style.transform = 'none';
-              e.target.style.boxShadow = '0 6px 20px rgba(0,0,0,0.08)';
+              e.currentTarget.style.transform = 'none';
+              e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.08)';
             }}
           >
             <h3 style={{ ...cardTitleStyle, color: '#c62828' }}>Expenses</h3>
             <p style={{ fontSize: '14px', color: '#546e7a', marginBottom: '20px' }}>
               Track all your business expenses
             </p>
-            <button style={{ ...cardButtonStyle, backgroundColor: '#f44336', color: '#fff' }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect('expenses');
+              }}
+              style={{ ...cardButtonStyle, backgroundColor: '#f44336', color: '#fff' }}
+            >
               Open Expenses
             </button>
           </div>
@@ -389,10 +407,19 @@ function Dashboard({ onSelect }) {
         </h3>
         <div style={summaryStyle}>
           {/* Total Receivables */}
-          <div style={summaryCardStyle(
-            'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)',
-            '#a5d6a7'
-          )}>
+          <div
+            style={{
+              ...summaryCardStyle(
+                'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)',
+                '#a5d6a7'
+              ),
+              cursor: 'pointer',
+              transition: 'transform 0.2s'
+            }}
+            onClick={() => onSelect('customers')}
+            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+          >
             <div style={{ fontSize: '14px', color: '#2e7d32', marginBottom: '8px' }}>
               Total Receivables
             </div>
@@ -405,10 +432,19 @@ function Dashboard({ onSelect }) {
           </div>
 
           {/* Total Payables */}
-          <div style={summaryCardStyle(
-            'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)',
-            '#ffcc80'
-          )}>
+          <div
+            style={{
+              ...summaryCardStyle(
+                'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)',
+                '#ffcc80'
+              ),
+              cursor: 'pointer',
+              transition: 'transform 0.2s'
+            }}
+            onClick={() => onSelect('suppliers')}
+            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+          >
             <div style={{ fontSize: '14px', color: '#ef6c00', marginBottom: '8px' }}>
               Total Payables
             </div>
@@ -421,10 +457,19 @@ function Dashboard({ onSelect }) {
           </div>
 
           {/* Total Expenses */}
-          <div style={summaryCardStyle(
-            'linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%)',
-            '#f8bbd9'
-          )}>
+          <div
+            style={{
+              ...summaryCardStyle(
+                'linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%)',
+                '#f8bbd9'
+              ),
+              cursor: 'pointer',
+              transition: 'transform 0.2s'
+            }}
+            onClick={() => onSelect('expenses')}
+            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+          >
             <div style={{ fontSize: '14px', color: '#c62828', marginBottom: '8px' }}>
               Total Expenses
             </div>
@@ -436,7 +481,7 @@ function Dashboard({ onSelect }) {
             </div>
           </div>
 
-          {/* Net Profit */}
+          {/* Net Profit (No Link) */}
           <div style={summaryCardStyle(
             netProfit >= 0
               ? 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)'

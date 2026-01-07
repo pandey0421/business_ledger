@@ -77,6 +77,36 @@ function Suppliers({ goBack }) {
     }
   };
 
+  // Deep Linking for Supplier Ledger
+  useEffect(() => {
+    const handleHash = () => {
+      const hash = window.location.hash.slice(1);
+      const [route, id] = hash.split('/');
+
+      if (route === 'suppliers' && id && suppliers.length > 0) {
+        // Find supplier by ID
+        const found = suppliers.find(s => s.id === id);
+        if (found) {
+          setSelectedSupplier(found);
+        }
+      } else if (route === 'suppliers' && !id) {
+        setSelectedSupplier(null);
+      }
+    };
+
+    handleHash();
+    window.addEventListener('hashchange', handleHash);
+    return () => window.removeEventListener('hashchange', handleHash);
+  }, [suppliers]);
+
+  const handleSelectSupplier = (supplier) => {
+    window.location.hash = `suppliers/${supplier.id}`;
+  };
+
+  const handleBack = () => {
+    window.location.hash = 'suppliers';
+  };
+
   useEffect(() => {
     fetchSuppliers();
     fetchOverallStats();
@@ -171,7 +201,7 @@ function Suppliers({ goBack }) {
   };
 
   if (selectedSupplier) {
-    return <SupplierLedger supplier={selectedSupplier} onBack={() => setSelectedSupplier(null)} />;
+    return <SupplierLedger supplier={selectedSupplier} onBack={handleBack} />;
   }
 
   return (
@@ -448,7 +478,7 @@ function Suppliers({ goBack }) {
                   boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
                   boxSizing: 'border-box'
                 }}
-                onClick={() => setSelectedSupplier({ ...s, userId })}
+                onClick={() => handleSelectSupplier(s)}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = 'translateY(-6px)';
                   e.currentTarget.style.boxShadow = '0 12px 32px rgba(239,108,0,0.2)';

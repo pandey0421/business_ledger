@@ -80,6 +80,38 @@ function Customers({ goBack }) {
     }
   };
 
+  // Deep Linking for Customer Ledger
+  useEffect(() => {
+    const handleHash = () => {
+      const hash = window.location.hash.slice(1);
+      const [route, id] = hash.split('/');
+
+      if (route === 'customers' && id && customers.length > 0) {
+        // Find customer by ID
+        const found = customers.find(c => c.id === id);
+        if (found) {
+          // Need to set ID and data. The data is already in 'customers' array.
+          setSelectedCustomer(found);
+        }
+      } else if (route === 'customers' && !id) {
+        setSelectedCustomer(null);
+      }
+    };
+
+    handleHash();
+    window.addEventListener('hashchange', handleHash);
+    return () => window.removeEventListener('hashchange', handleHash);
+  }, [customers]); // Run when customers are loaded
+
+  const handleSelectCustomer = (customer) => {
+    // Update URL, effect will handle state change
+    window.location.hash = `customers/${customer.id}`;
+  };
+
+  const handleBack = () => {
+    window.location.hash = 'customers';
+  };
+
   useEffect(() => {
     fetchCustomers();
     fetchOverallStats();
@@ -169,7 +201,7 @@ function Customers({ goBack }) {
   };
 
   if (selectedCustomer) {
-    return <CustomerLedger customer={selectedCustomer} onBack={() => setSelectedCustomer(null)} />;
+    return <CustomerLedger customer={selectedCustomer} onBack={handleBack} />;
   }
 
   return (
@@ -499,7 +531,7 @@ function Customers({ goBack }) {
                   boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
                   boxSizing: 'border-box'
                 }}
-                onClick={() => setSelectedCustomer({ ...c, userId })}
+                onClick={() => handleSelectCustomer(c)}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = 'translateY(-6px)';
                   e.currentTarget.style.boxShadow = '0 12px 32px rgba(46,125,50,0.2)';
