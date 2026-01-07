@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
 import { Toaster, toast } from 'react-hot-toast';
+import { Analytics } from "@vercel/analytics/react";
 
 import Login from "./screens/Login";
 import Dashboard from "./screens/Dashboard";
@@ -119,6 +120,8 @@ function App() {
 
   return (
     <>
+      <Analytics />
+      
       <a
         href="#main-content"
         style={{
