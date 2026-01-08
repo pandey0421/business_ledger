@@ -204,15 +204,16 @@ const Login = ({ onSuccess }) => {
     <div
       style={{
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #e0f7fa 0%, #e8eaf6 100%)',
+        background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: isMobile ? '12px 20px' : '32px',
+        padding: isMobile ? '16px' : '32px',
         margin: 0,
         width: '100vw',
         overflowX: 'hidden',
-        boxSizing: 'border-box'
+        boxSizing: 'border-box',
+        fontFamily: "'Inter', sans-serif"
       }}
     >
       <div
@@ -220,39 +221,27 @@ const Login = ({ onSuccess }) => {
           maxWidth: isMobile ? '100%' : '420px',
           width: '100%',
           backgroundColor: '#ffffff',
-          borderRadius: '12px',
-          padding: isMobile ? '24px 20px 32px' : '32px',
-          boxShadow: isMobile ? '0 4px 16px rgba(0,0,0,0.08)' : '0 8px 32px rgba(0,0,0,0.12)',
-          border: '1px solid #e3f2fd',
+          borderRadius: '24px',
+          padding: isMobile ? '24px' : '40px',
+          boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
+          border: '1px solid #f0f0f0',
           boxSizing: 'border-box'
         }}
         role="main"
         aria-label="Login form"
       >
-        <footer
-          style={{
-            marginTop: 16,
-            fontSize: 12,
-            color: "#607d8b",
-            textAlign: "center",
-          }}
-        >
-          © {new Date().getFullYear()} Karobaar Khata. All rights reserved.
-        </footer>
-
-        {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: isMobile ? '24px' : '32px' }}>
           <h2 style={{
             marginBottom: '8px',
             color: '#1a237e',
-            fontSize: isMobile ? '24px' : '28px',
+            fontSize: isMobile ? '28px' : '32px',
             fontWeight: 'bold'
           }}>
             {showSignup ? 'Create Account' : 'Karobar Khata'}
           </h2>
           <p style={{
             margin: 0,
-            color: '#607d8b',
+            color: '#546e7a',
             fontSize: isMobile ? '14px' : '16px'
           }}>
             {showSignup
@@ -262,10 +251,10 @@ const Login = ({ onSuccess }) => {
           </p>
           {!emailVerified && (
             <p style={{
-              color: '#ff9800',
+              color: '#ef6c00',
               fontSize: '12px',
               marginTop: '8px',
-              fontWeight: '500'
+              fontWeight: '600'
             }}>
               Please verify your email to continue
             </p>
@@ -294,8 +283,8 @@ const Login = ({ onSuccess }) => {
             <div
               style={{
                 backgroundColor: '#ffffff',
-                borderRadius: '12px',
-                padding: isMobile ? '20px 24px' : '24px',
+                borderRadius: '16px',
+                padding: isMobile ? '20px 24px' : '32px',
                 maxWidth: isMobile ? '90vw' : '400px',
                 width: '90%',
                 boxSizing: 'border-box'
@@ -306,14 +295,15 @@ const Login = ({ onSuccess }) => {
                 style={{
                   color: '#1a237e',
                   marginBottom: '16px',
-                  fontSize: isMobile ? '20px' : '22px'
+                  fontSize: isMobile ? '20px' : '22px',
+                  fontWeight: 'bold'
                 }}
               >
                 Reset Password
               </h3>
               <form onSubmit={handlePasswordReset} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div>
-                  <label style={{ fontSize: '14px', color: '#455a64', display: 'block', marginBottom: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: '600', color: '#455a64', display: 'block', marginBottom: '8px' }}>
                     Email
                   </label>
                   <input
@@ -324,8 +314,8 @@ const Login = ({ onSuccess }) => {
                     disabled={loading}
                     style={{
                       width: '100%',
-                      padding: '10px 12px',
-                      borderRadius: '8px',
+                      padding: '12px 14px',
+                      borderRadius: '12px',
                       border: '1px solid #cfd8dc',
                       outline: 'none',
                       fontSize: '14px',
@@ -342,9 +332,9 @@ const Login = ({ onSuccess }) => {
                   <div
                     id="reset-error"
                     style={{
-                      padding: '8px 10px',
+                      padding: '12px',
                       backgroundColor: '#ffebee',
-                      borderRadius: '6px',
+                      borderRadius: '8px',
                       border: '1px solid #ffccdd',
                       color: '#d32f2f',
                       fontSize: '14px'
@@ -365,12 +355,12 @@ const Login = ({ onSuccess }) => {
                     disabled={loading}
                     style={{
                       flex: 1,
-                      padding: '10px',
-                      borderRadius: '8px',
+                      padding: '12px',
+                      borderRadius: '12px',
                       border: '1px solid #cfd8dc',
                       background: '#fafafa',
                       color: '#455a64',
-                      fontWeight: 500,
+                      fontWeight: 600,
                       cursor: loading ? 'not-allowed' : 'pointer',
                       fontSize: '14px'
                     }}
@@ -382,12 +372,12 @@ const Login = ({ onSuccess }) => {
                     disabled={loading}
                     style={{
                       flex: 1,
-                      padding: '10px',
-                      borderRadius: '8px',
+                      padding: '12px',
+                      borderRadius: '12px',
                       border: 'none',
                       background: loading
                         ? 'linear-gradient(135deg, #bdbdbd 0%, #e0e0e0 100%)'
-                        : 'linear-gradient(135deg, #42a5f5 0%, #5c6bc0 100%)',
+                        : 'linear-gradient(135deg, #42a5f5 0%, #304ffe 100%)',
                       color: '#ffffff',
                       fontWeight: 600,
                       cursor: loading ? 'not-allowed' : 'pointer',
@@ -410,7 +400,7 @@ const Login = ({ onSuccess }) => {
         >
           {/* Email Field */}
           <div>
-            <label style={{ fontSize: '14px', color: '#455a64', display: 'block', marginBottom: '4px' }}>
+            <label style={{ fontSize: '12px', fontWeight: '600', color: '#455a64', display: 'block', marginBottom: '8px' }}>
               Email
             </label>
             <input
@@ -420,11 +410,10 @@ const Login = ({ onSuccess }) => {
               required
               disabled={loading}
               style={{
-                marginTop: '4px',
                 width: '100%',
                 padding: '12px 14px',
-                borderRadius: '8px',
-                border: '1px solid #cfd8dc',
+                borderRadius: '12px',
+                border: '1px solid #e0e0e0',
                 outline: 'none',
                 fontSize: '14px',
                 transition: 'all 0.2s',
@@ -438,7 +427,7 @@ const Login = ({ onSuccess }) => {
 
           {/* Password Field */}
           <div>
-            <label style={{ fontSize: '14px', color: '#455a64', display: 'block', marginBottom: '4px' }}>
+            <label style={{ fontSize: '12px', fontWeight: '600', color: '#455a64', display: 'block', marginBottom: '8px' }}>
               Password
             </label>
             <div style={{ position: 'relative' }}>
@@ -451,9 +440,9 @@ const Login = ({ onSuccess }) => {
                 style={{
                   width: '100%',
                   padding: '12px 14px 12px 14px',
-                  paddingRight: '36px',
-                  borderRadius: '8px',
-                  border: '1px solid #cfd8dc',
+                  paddingRight: '40px',
+                  borderRadius: '12px',
+                  border: '1px solid #e0e0e0',
                   outline: 'none',
                   fontSize: '14px',
                   transition: 'all 0.2s',
@@ -496,7 +485,7 @@ const Login = ({ onSuccess }) => {
           {/* Confirm Password Field - Signup only */}
           {showSignup && (
             <div>
-              <label style={{ fontSize: '14px', color: '#455a64', display: 'block', marginBottom: '4px' }}>
+              <label style={{ fontSize: '12px', fontWeight: '600', color: '#455a64', display: 'block', marginBottom: '8px' }}>
                 Confirm Password
               </label>
               <div style={{ position: 'relative' }}>
@@ -507,12 +496,11 @@ const Login = ({ onSuccess }) => {
                   required
                   disabled={loading}
                   style={{
-                    marginTop: '4px',
                     width: '100%',
                     padding: '12px 14px 12px 14px',
-                    paddingRight: '36px',
-                    borderRadius: '8px',
-                    border: '1px solid #cfd8dc',
+                    paddingRight: '40px',
+                    borderRadius: '12px',
+                    border: '1px solid #e0e0e0',
                     outline: 'none',
                     fontSize: '14px',
                     transition: 'all 0.2s',
@@ -521,33 +509,6 @@ const Login = ({ onSuccess }) => {
                   }}
                   placeholder="Confirm your password"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  disabled={loading}
-                  style={{
-                    position: 'absolute',
-                    right: '12px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    cursor: loading ? 'not-allowed' : 'pointer',
-                    opacity: loading ? 0.5 : 1
-                  }}
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showPassword ? (
-                    <svg width="20" height="20" fill="none" stroke="#607d8b" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                  ) : (
-                    <svg width="20" height="20" fill="none" stroke="#607d8b" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
-                    </svg>
-                  )}
-                </button>
               </div>
             </div>
           )}
@@ -557,9 +518,9 @@ const Login = ({ onSuccess }) => {
             <div
               id="login-error"
               style={{
-                padding: '8px 12px',
+                padding: '12px',
                 backgroundColor: '#ffebee',
-                borderRadius: '6px',
+                borderRadius: '8px',
                 border: '1px solid #ffccdd',
                 color: '#d32f2f',
                 fontSize: '14px',
@@ -593,18 +554,19 @@ const Login = ({ onSuccess }) => {
             style={{
               width: '100%',
               padding: '12px 16px',
-              borderRadius: '8px',
+              borderRadius: '12px',
               border: 'none',
               background: loading || !canAttemptLogin()
                 ? 'linear-gradient(135deg, #bdbdbd 0%, #e0e0e0 100%)'
-                : 'linear-gradient(135deg, #42a5f5 0%, #5c6bc0 100%)',
+                : 'linear-gradient(135deg, #42a5f5 0%, #304ffe 100%)',
               color: '#ffffff',
               fontWeight: 600,
-              fontSize: isMobile ? '16px' : '16px',
+              fontSize: '16px',
               cursor: loading || !canAttemptLogin() ? 'not-allowed' : 'pointer',
               transition: 'all 0.2s',
               opacity: loading || !canAttemptLogin() ? 0.7 : 1,
-              minHeight: '48px'
+              minHeight: '48px',
+              boxShadow: loading ? 'none' : '0 4px 12px rgba(66, 165, 245, 0.3)'
             }}
             aria-label={showSignup ? 'Create account' : 'Sign in'}
           >
@@ -628,7 +590,7 @@ const Login = ({ onSuccess }) => {
         </form>
 
         {/* Toggle between Login/Signup */}
-        <div style={{ textAlign: 'center', marginTop: isMobile ? '20px' : '24px', paddingTop: '20px', borderTop: '1px solid #e0e0e0' }}>
+        <div style={{ textAlign: 'center', marginTop: isMobile ? '20px' : '24px', paddingTop: '20px', borderTop: '1px solid #f0f0f0' }}>
           <button
             type="button"
             onClick={() => {
@@ -643,10 +605,11 @@ const Login = ({ onSuccess }) => {
               padding: 0,
               background: 'none',
               border: 'none',
-              color: '#42a5f5',
+              color: '#1565c0',
               fontSize: '14px',
-              fontWeight: 500,
-              cursor: loading ? 'not-allowed' : 'pointer'
+              fontWeight: 600,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              marginBottom: '12px'
             }}
           >
             {showSignup ? 'Already have an account? Login' : "Don't have an account? Create Account"}
@@ -658,21 +621,32 @@ const Login = ({ onSuccess }) => {
               onClick={() => setShowReset(true)}
               disabled={loading}
               style={{
-                marginTop: '8px',
                 padding: 0,
                 background: 'none',
                 border: 'none',
-                color: '#42a5f5',
+                color: '#607d8b',
                 fontSize: '14px',
                 cursor: loading ? 'not-allowed' : 'pointer',
-                textAlign: 'left',
-                width: '100%'
+                textAlign: 'center',
+                width: '100%',
+                marginTop: '8px'
               }}
             >
               Forgot Password?
             </button>
           )}
         </div>
+
+        <footer
+          style={{
+            marginTop: 32,
+            fontSize: 12,
+            color: "#90a4ae",
+            textAlign: "center",
+          }}
+        >
+          © {new Date().getFullYear()} Karobaar Khata. All rights reserved.
+        </footer>
       </div>
 
       <style jsx>{`

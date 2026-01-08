@@ -1,9 +1,9 @@
-import { useRef, useEffect, useState } from "react"; // Added useRef
+import { useRef, useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "./firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { Toaster, toast } from 'react-hot-toast';
-import { App as CapacitorApp } from '@capacitor/app'; // Import Capacitor App
+import { App as CapacitorApp } from '@capacitor/app';
 
 import Login from "./screens/Login";
 import Dashboard from "./screens/Dashboard";
@@ -14,9 +14,11 @@ import Privacy from "./screens/Privacy";
 import Terms from "./screens/Terms";
 import Subscription from "./screens/Subscription";
 import Landing from "./screens/Landing";
+import Analytics from "./screens/Analytics";
 
 import Footer from "./components/Footer";
 import Spinner from "./components/Spinner";
+import BrandingHeader from "./components/BrandingHeader";
 
 import { signOut } from "firebase/auth";
 
@@ -28,7 +30,7 @@ function App() {
   const getScreenFromHash = () => {
     const hash = window.location.hash.slice(1); // Remove #
     const [route] = hash.split('/');
-    const VALID_SCREENS = ["dashboard", "customers", "suppliers", "expenses", "privacy", "terms"];
+    const VALID_SCREENS = ["dashboard", "customers", "suppliers", "expenses", "analytics", "privacy", "terms"];
     return VALID_SCREENS.includes(route) ? route : "dashboard";
   };
 
@@ -216,37 +218,23 @@ function App() {
       }
     }
 
-    // SUBSCRIPTION GATE - TEMPORARILY DISABLED
-    // If not subscribed, user can ONLY access 'subscription' (or privacy/terms)
-    /*
-    if (!isSubscribed) {
-       // Allow legal pages
-       if (screen === 'privacy') return <Privacy goBack={() => setScreen("dashboard")} />;
-       if (screen === 'terms') return <Terms goBack={() => setScreen("dashboard")} />;
-       
-       // Force subscription screen for everything else
-       return <Subscription onSuccess={() => {
-         setIsSubscribed(true);
-         setScreen("dashboard");
-       }} />;
-    }
-    */
-
     switch (screen) {
       case "dashboard":
-        return <Dashboard onSelect={(s) => setScreen(s)} />;
+        return <Dashboard user={user} onSelect={(s) => setScreen(s)} />;
       case "customers":
         return <Customers goBack={() => setScreen("dashboard")} />;
       case "suppliers":
         return <Suppliers goBack={() => setScreen("dashboard")} />;
       case "expenses":
         return <Expenses goBack={() => setScreen("dashboard")} />;
+      case "analytics":
+        return <Analytics goBack={() => setScreen("dashboard")} />;
       case "privacy":
         return <Privacy goBack={() => setScreen("dashboard")} />;
       case "terms":
         return <Terms goBack={() => setScreen("dashboard")} />;
       default:
-        return <Dashboard onSelect={(s) => setScreen(s)} />;
+        return <Dashboard user={user} onSelect={(s) => setScreen(s)} />;
     }
   };
 
@@ -292,20 +280,11 @@ function App() {
       <div
         style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}
       >
+        {user && <BrandingHeader />}
         <main id="main-content" style={{ flex: 1 }}>
           {renderScreen()}
         </main>
 
-        {/* Only show footer if user is logged in or looking at legal pages, 
-            but usually good to show everywhere except maybe specialized screens.
-            For now, showing everywhere as requested "Global Footer". 
-            Adjusting Login to handle its own layout or being wrapped. 
-            Modifying Login.jsx showed it has full height layout. 
-            So we might need to conditionally render text-only footer on Login 
-            or let Login be full screen and this footer sits below? 
-            Actually Login.jsx has its own mini footer. 
-            Let's hide global footer on Login if user is not authenticated.
-         */}
         {(user || screen === 'privacy' || screen === 'terms') && (
           <Footer onNavigate={(page) => setScreen(page)} />
         )}

@@ -1,524 +1,346 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Menu, X, Users, ShoppingBag, CreditCard, LogOut, Grid, BarChart2 } from 'lucide-react';
+import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
-import { auth, db } from '../firebase';
-import { collection, getDocs } from 'firebase/firestore';
 
-function Dashboard({ onSelect }) {
-  const [stats, setStats] = useState({
-    totalReceivables: 0,
-    totalPayables: 0,
-    totalExpenses: 0,
-    totalCustomers: 0,
-    totalSuppliers: 0,
-    totalExpenseCategories: 0,
-    netProfit: 0
-  });
-  const [loading, setLoading] = useState(true);
-  const [isMobile, setIsMobile] = useState(false);
+const Dashboard = ({ user, onSelect }) => {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
-  // Responsive hook
   useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
-
-  const userId = auth.currentUser?.uid;
-
-  const fetchStats = async () => {
-    if (!userId) return;
-    setLoading(true);
-    try {
-      // 1. Fetch ALL Customers (list) first
-      const customersRef = collection(db, 'users', userId, 'customers');
-      const customersSnapshot = await getDocs(customersRef);
-      const customers = customersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-      // 2. Fetch ALL Suppliers (list)
-      const suppliersRef = collection(db, 'users', userId, 'suppliers');
-      const suppliersSnapshot = await getDocs(suppliersRef);
-      const suppliers = suppliersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-      // 3. Fetch ALL Expenses (list)
-      const expensesRef = collection(db, 'users', userId, 'expenses');
-      const expensesSnapshot = await getDocs(expensesRef);
-      const expenses = expensesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-      // Parallelize Ledger Fetches for Customers
-      const customerPromises = customers.map(async (customer) => {
-        const ledgerRef = collection(db, 'customers', customer.id, 'ledger');
-        const ledgerSnapshot = await getDocs(ledgerRef);
-        let sales = 0;
-        let payments = 0;
-        ledgerSnapshot.docs.forEach(doc => {
-          const data = doc.data();
-          const amount = Number(data.amount) || 0;
-          if (data.type === 'sale') sales += amount;
-          if (data.type === 'payment') payments += amount;
-        });
-        return { sales, payments, receivable: sales - payments };
-      });
-
-      // Parallelize Ledger Fetches for Suppliers
-      const supplierPromises = suppliers.map(async (supplier) => {
-        const ledgerRef = collection(db, 'suppliers', supplier.id, 'ledger');
-        const ledgerSnapshot = await getDocs(ledgerRef);
-        let purchases = 0;
-        let payments = 0;
-        ledgerSnapshot.docs.forEach(doc => {
-          const data = doc.data();
-          const amount = Number(data.amount) || 0;
-          if (data.type === 'purchase') purchases += amount;
-          if (data.type === 'payment') payments += amount;
-        });
-        return { purchases, payments, payable: purchases - payments };
-      });
-
-      // Parallelize Ledger Fetches for Expenses
-      const expensePromises = expenses.map(async (expense) => {
-        const ledgerRef = collection(db, 'expenses', expense.id, 'ledger');
-        const ledgerSnapshot = await getDocs(ledgerRef);
-        let expTotal = 0;
-        ledgerSnapshot.docs.forEach(doc => {
-          const amount = Number(doc.data().amount) || 0;
-          expTotal += amount;
-        });
-        return expTotal;
-      });
-
-      // Await all
-      const [customerResults, supplierResults, expenseResults] = await Promise.all([
-        Promise.all(customerPromises),
-        Promise.all(supplierPromises),
-        Promise.all(expensePromises)
-      ]);
-
-      // Aggregate
-      let totalReceivables = 0;
-      let totalSales = 0;
-      customerResults.forEach(r => {
-        totalReceivables += r.receivable;
-        totalSales += r.sales;
-      });
-
-      let totalPayables = 0;
-      let totalPurchases = 0;
-      supplierResults.forEach(r => {
-        totalPayables += r.payable;
-        totalPurchases += r.purchases;
-      });
-
-      const totalExpenses = expenseResults.reduce((a, b) => a + b, 0);
-
-      // Correct Net Profit: Sales - Purchases - Expenses
-      // Note: This assumes 'Sales' are revenue and 'Purchases' are COGS.
-      const calculatedNetProfit = totalSales - totalPurchases - totalExpenses;
-
-      setStats({
-        totalReceivables: Math.max(0, totalReceivables),
-        totalPayables: Math.max(0, totalPayables),
-        totalExpenses: Math.max(0, totalExpenses),
-        totalCustomers: customers.length,
-        totalSuppliers: suppliers.length,
-        totalExpenseCategories: expenses.length,
-        netProfit: calculatedNetProfit
-      });
-
-    } catch (err) {
-      console.error('Failed to fetch stats', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchStats();
-  }, [userId]);
 
   const handleLogout = async () => {
     try {
       await signOut(auth);
-    } catch (err) {
-      console.error('Logout failed', err);
+      // window.location.reload(); // Handled by auth listener in App.jsx usually
+    } catch (error) {
+      console.error('Error logging out:', error);
     }
   };
 
-  const formatAmount = (num) => {
-    return new Intl.NumberFormat('en-IN').format(Math.round(num));
+  const safeUserName = user && user.email ? user.email.split('@')[0] : 'User';
+
+  // Navigation Helper
+  const updateScreenAndHash = (screenName, hashName) => {
+    // 1. Update React State
+    onSelect(screenName);
+    // 2. Update URL Hash for history/back-button support
+    // We use a small timeout or direct set, but App.jsx listening to hash change is robust
+    window.location.hash = hashName;
   };
 
-  const netProfit = stats.netProfit;
-
-  // 🎯 PERFECT DESKTOP + MOBILE STYLES
-  const containerStyle = {
-    minHeight: '100vh',
-    background: 'linear-gradient(135deg, #f1f8e9 0%, #e3f2fd 100%)',
-    display: 'flex',
-    flexDirection: 'column',
-    width: '100vw',
-    margin: 0,
-    padding: isMobile ? '4px' : '24px',  // ONLY mobile padding reduced
-    overflowX: 'hidden',
-    boxSizing: 'border-box'
+  const handleAnalyticsClick = () => {
+    updateScreenAndHash('analytics', 'Analytics');
   };
 
-  const mainCardStyle = {
-    maxWidth: isMobile ? 'calc(100vw - 8px)' : '1200px',  // Mobile: viewport minus padding
+  // --- STYLES ---
+
+  const dashboardStyle = {
+    padding: isMobile ? '16px' : '32px',
+    fontFamily: "'Inter', sans-serif",
+    maxWidth: '1200px',
     margin: '0 auto',
     width: '100%',
-    backgroundColor: '#ffffff',
-    borderRadius: isMobile ? '8px' : '16px',              // Smaller radius mobile
-    padding: isMobile ? '20px' : '32px',
-    boxShadow: isMobile ? '0 4px 16px rgba(0,0,0,0.08)' : '0 8px 32px rgba(0,0,0,0.12)',
-    border: isMobile ? '1px solid #e0e0e0' : '1px solid #e0e0e0',
     boxSizing: 'border-box'
   };
 
   const headerStyle = {
     display: 'flex',
-    justifyContent: isMobile ? 'center' : 'space-between',  // Desktop unchanged
-    alignItems: isMobile ? 'flex-start' : 'center',
-    marginBottom: isMobile ? '20px' : '32px',
-    gap: isMobile ? '12px' : '0',                          // Desktop gap 0
-    flexDirection: isMobile ? 'column' : 'row',
-    boxSizing: 'border-box'              // Desktop row
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    marginBottom: '32px',
+    position: 'relative' // For mobile menu positioning
   };
 
-  const titleStyle = {
-    margin: 0,
-    color: '#1b5e20',
-    fontSize: isMobile ? '24px' : '32px',
-    fontWeight: 'bold'
-  };
-
-  const subtitleStyle = {
-    marginTop: isMobile ? '4px' : '4px',
-    color: '#607d8b',
-    fontSize: isMobile ? '14px' : '16px',
-    margin: 0
-  };
-
-  const logoutButtonStyle = {
-    padding: isMobile ? '10px 16px' : '12px 20px',
-    borderRadius: '999px',
-    border: '1px solid #ef9a9a',
-    backgroundColor: '#ffebee',
-    color: '#c62828',
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: '500',
-    transition: 'all 0.2s',
-    width: isMobile ? '100%' : 'auto'
+  const sectionTitleStyle = {
+    fontSize: '20px',
+    fontWeight: 'bold',
+    color: '#1a237e',
+    marginBottom: '16px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
   };
 
   const actionCardsStyle = {
     display: 'grid',
-    gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(280px, 1fr))',  // Desktop grid preserved
-    gap: isMobile ? '16px' : '24px',
-    marginBottom: isMobile ? '28px' : '40px'
+    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+    gap: '24px',
+    marginBottom: '40px'
   };
 
-  const cardStyle = (hoverColor) => ({
-    background: `linear-gradient(135deg, ${hoverColor[0]} 0%, ${hoverColor[1]} 100%)`,
+  const cardStyle = {
+    background: 'white',
     borderRadius: '16px',
-    padding: isMobile ? '20px' : '24px',                    // Slightly less mobile padding
-    boxShadow: '0 6px 20px rgba(0,0,0,0.08)',
-    border: '1px solid transparent',
+    padding: '24px',
+    boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
+    border: '1px solid #f0f0f0',
     cursor: 'pointer',
-    transition: 'all 0.3s',
-    display: 'flex',
-    flexDirection: 'column'
-  });
-
-  const cardTitleStyle = {
-    margin: '0 0 16px 0',
-    fontSize: isMobile ? '20px' : '24px'
-  };
-
-  const cardButtonStyle = {
-    width: '100%',
-    padding: '12px 20px',
-    borderRadius: '10px',
-    border: 'none',
-    fontWeight: '600',
-    cursor: 'pointer',
-    fontSize: '14px',
-    marginTop: 'auto'
-  };
-
-  const summaryStyle = {
-    display: 'grid',
-    gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(260px, 1fr))',  // Desktop grid preserved
-    gap: isMobile ? '16px' : '24px'
-  };
-
-  const summaryCardStyle = (bgGradient, borderColor) => ({
-    background: bgGradient,
-    borderRadius: '16px',
-    padding: isMobile ? '20px' : '24px',
-    textAlign: 'center',
-    border: `1px solid ${borderColor}`,
+    transition: 'all 0.3s ease',
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px'
-  });
-
-  const amountStyle = {
-    fontSize: isMobile ? '28px' : '36px',
-    fontWeight: '700',
-    marginBottom: '8px'
-  };
-
-  const refreshStyle = {
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    borderRadius: '16px',
-    padding: isMobile ? '20px' : '24px',
     textAlign: 'center',
-    border: '1px solid #e0e0e0',
-    cursor: 'pointer',
-    marginTop: isMobile ? '24px' : '32px',
-    width: '100%'
+    position: 'relative',
+    overflow: 'hidden'
   };
 
-  if (loading) {
-    return (
-      <div style={containerStyle}>
-        <div style={mainCardStyle}>
-          <div style={{ textAlign: 'center', padding: '60px 12px', color: '#78909c' }}>
-            Loading business stats...
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // user prop is required, but if missing, we can just show a placeholder or nothing
+  if (!user) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading user data...</div>;
 
   return (
-    <div style={containerStyle}>
-      <div style={mainCardStyle}>
+    <div style={{
+      background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
+      minHeight: '100vh',
+      width: '100%',
+      maxWidth: '100%',
+      overflowX: 'hidden',
+      boxSizing: 'border-box',
+      paddingBottom: '40px'
+    }}>
+      <div style={dashboardStyle}>
+        {/* Top Header Bar */}
         <div style={headerStyle}>
-          <div>
-            <h2 style={titleStyle}>Karobar Khata</h2>
-            <p style={subtitleStyle}>Real-time overview of your accounts</p>
-          </div>
-          <button onClick={handleLogout} style={logoutButtonStyle}>
-            Logout
-          </button>
+
+          {/* Desktop User Profile & Actions */}
+          {!isMobile && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+
+              {/* User Info */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '12px', color: '#546e7a' }}>Signed in as</div>
+                  <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#1a237e' }}>{safeUserName}</div>
+                </div>
+                <div style={{
+                  width: '40px', height: '40px', borderRadius: '10px',
+                  background: '#1a237e', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: 'white', fontWeight: 'bold', fontSize: '18px', border: '1px solid #1a237e'
+                }}>
+                  {safeUserName.charAt(0).toUpperCase()}
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div style={{ width: '1px', height: '32px', background: '#e0e0e0' }} />
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  onClick={handleAnalyticsClick}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    padding: '8px 16px', borderRadius: '8px',
+                    border: '1px solid #c5cae9', background: 'white',
+                    color: '#1a237e', fontWeight: '600',
+                    cursor: 'pointer', fontSize: '14px', transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={e => e.target.style.background = '#e8eaf6'}
+                  onMouseLeave={e => e.target.style.background = 'white'}
+                >
+                  <BarChart2 size={16} />
+                  Analytics
+                </button>
+                <button
+                  onClick={handleLogout}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    padding: '8px 16px', borderRadius: '8px',
+                    border: '1px solid #ef5350', background: '#ffebee',
+                    color: '#c62828', fontWeight: '600',
+                    cursor: 'pointer', fontSize: '14px', transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={e => e.target.style.background = '#ffcdd2'}
+                  onMouseLeave={e => e.target.style.background = '#ffebee'}
+                >
+                  <LogOut size={16} />
+                  Logout
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Mobile Hamburger Menu */}
+          {isMobile && (
+            <button
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              style={{
+                background: 'white', border: 'none', padding: '10px',
+                borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                cursor: 'pointer', color: '#1a237e', zIndex: 1001 // Ensure above overlay
+              }}
+            >
+              {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
+          )}
+
+          {/* Mobile Menu Overlay */}
+          {isMobile && isMenuOpen && (
+            <div style={{
+              position: 'absolute', top: '70px', right: '0',
+              background: 'white', padding: '16px', borderRadius: '16px',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.1)',
+              display: 'flex', flexDirection: 'column', gap: '12px',
+              zIndex: 1000, width: '200px', border: '1px solid #eee'
+            }}>
+              <button
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  handleAnalyticsClick();
+                }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '12px',
+                  padding: '12px', width: '100%', border: 'none', background: '#e8eaf6',
+                  color: '#1a237e', borderRadius: '8px', fontWeight: '600', cursor: 'pointer'
+                }}
+              >
+                <BarChart2 size={18} /> Analytics
+              </button>
+              <button
+                onClick={handleLogout}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '12px',
+                  padding: '12px', width: '100%', border: 'none', background: '#ffcdd2',
+                  color: '#c62828', borderRadius: '8px', fontWeight: '600', cursor: 'pointer'
+                }}
+              >
+                <LogOut size={18} /> Logout
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Action Cards */}
+        {/* Main Action Cards */}
+        <div style={sectionTitleStyle}>
+          <Grid size={20} />
+          Quick Actions
+        </div>
+
         <div style={actionCardsStyle}>
           {/* Customers Card */}
           <div
-            style={cardStyle(['#e3f2fd', '#e8eaf6'])}
-            onClick={() => onSelect('customers')}
+            style={cardStyle}
             onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-4px)';
-              e.currentTarget.style.boxShadow = '0 12px 40px rgba(30, 136, 229, 0.2)';
+              e.currentTarget.style.transform = 'translateY(-5px)';
+              e.currentTarget.style.boxShadow = '0 12px 30px rgba(0,0,0,0.1)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'none';
-              e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.08)';
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.05)';
             }}
+            onClick={() => updateScreenAndHash('customers', 'Customers')}
           >
-            <h3 style={{ ...cardTitleStyle, color: '#1e88e5' }}>Customers</h3>
-            <p style={{ fontSize: '14px', color: '#546e7a', marginBottom: '20px' }}>
-              Manage customers and track receivables
-            </p>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onSelect('customers');
-              }}
-              style={{ ...cardButtonStyle, backgroundColor: '#42a5f5', color: '#fff' }}
-            >
-              Open Customers
+            <div style={{
+              width: '64px', height: '64px', borderRadius: '50%',
+              background: '#e8f5e9', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', marginBottom: '16px'
+            }}>
+              <Users size={32} color="#2e7d32" />
+            </div>
+            <h3 style={{ margin: '0 0 8px 0', color: '#1a237e', fontSize: '18px' }}>Customers</h3>
+            <p style={{ margin: 0, color: '#546e7a', fontSize: '14px' }}>Manage sales & receivables</p>
+            <button style={{
+              marginTop: '16px', padding: '8px 24px', borderRadius: '20px',
+              background: '#2e7d32', color: 'white', border: 'none',
+              fontWeight: '600', cursor: 'pointer'
+            }}>
+              View Ledger
             </button>
           </div>
 
           {/* Suppliers Card */}
           <div
-            style={cardStyle(['#fff3e0', '#fff8e1'])}
-            onClick={() => onSelect('suppliers')}
+            style={cardStyle}
             onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-4px)';
-              e.currentTarget.style.boxShadow = '0 12px 40px rgba(239, 108, 0, 0.2)';
+              e.currentTarget.style.transform = 'translateY(-5px)';
+              e.currentTarget.style.boxShadow = '0 12px 30px rgba(0,0,0,0.1)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'none';
-              e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.08)';
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.05)';
             }}
+            onClick={() => updateScreenAndHash('suppliers', 'Suppliers')}
           >
-            <h3 style={{ ...cardTitleStyle, color: '#ef6c00' }}>Suppliers</h3>
-            <p style={{ fontSize: '14px', color: '#546e7a', marginBottom: '20px' }}>
-              Manage suppliers and track payables
-            </p>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onSelect('suppliers');
-              }}
-              style={{ ...cardButtonStyle, backgroundColor: '#fb8c00', color: '#fff' }}
-            >
-              Open Suppliers
+            <div style={{
+              width: '64px', height: '64px', borderRadius: '50%',
+              background: '#ffebee', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', marginBottom: '16px'
+            }}>
+              <ShoppingBag size={32} color="#c62828" />
+            </div>
+            <h3 style={{ margin: '0 0 8px 0', color: '#1a237e', fontSize: '18px' }}>Suppliers</h3>
+            <p style={{ margin: 0, color: '#546e7a', fontSize: '14px' }}>Manage purchases & payables</p>
+            <button style={{
+              marginTop: '16px', padding: '8px 24px', borderRadius: '20px',
+              background: '#c62828', color: 'white', border: 'none',
+              fontWeight: '600', cursor: 'pointer'
+            }}>
+              View Ledger
             </button>
           </div>
 
           {/* Expenses Card */}
           <div
-            style={cardStyle(['#ffebee', '#ffcdd2'])}
-            onClick={() => onSelect('expenses')}
+            style={cardStyle}
             onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-4px)';
-              e.currentTarget.style.boxShadow = '0 12px 40px rgba(244, 67, 54, 0.2)';
+              e.currentTarget.style.transform = 'translateY(-5px)';
+              e.currentTarget.style.boxShadow = '0 12px 30px rgba(0,0,0,0.1)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'none';
-              e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.08)';
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.05)';
             }}
+            onClick={() => updateScreenAndHash('expenses', 'Expenses')}
           >
-            <h3 style={{ ...cardTitleStyle, color: '#c62828' }}>Expenses</h3>
-            <p style={{ fontSize: '14px', color: '#546e7a', marginBottom: '20px' }}>
-              Track all your business expenses
-            </p>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onSelect('expenses');
-              }}
-              style={{ ...cardButtonStyle, backgroundColor: '#f44336', color: '#fff' }}
-            >
-              Open Expenses
+            <div style={{
+              width: '64px', height: '64px', borderRadius: '50%',
+              background: '#e3f2fd', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', marginBottom: '16px'
+            }}>
+              <CreditCard size={32} color="#1565c0" />
+            </div>
+            <h3 style={{ margin: '0 0 8px 0', color: '#1a237e', fontSize: '18px' }}>Expenses</h3>
+            <p style={{ margin: 0, color: '#546e7a', fontSize: '14px' }}>Track daily business costs</p>
+            <button style={{
+              marginTop: '16px', padding: '8px 24px', borderRadius: '20px',
+              background: '#1565c0', color: 'white', border: 'none',
+              fontWeight: '600', cursor: 'pointer'
+            }}>
+              Track Expenses
             </button>
           </div>
         </div>
 
-        {/* Business Summary */}
-        <h3 style={{
-          margin: '0 0 24px 0',
-          color: '#37474f',
-          fontSize: isMobile ? '20px' : '24px'
+        {/* Promo / Info Section */}
+        <div style={{
+          background: 'white', borderRadius: '16px', padding: '24px',
+          border: '1px solid #e0e0e0', display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px'
         }}>
-          Business Summary
-        </h3>
-        <div style={summaryStyle}>
-          {/* Total Receivables */}
-          <div
+          <div>
+            <h3 style={{ margin: '0 0 8px 0', color: '#1a237e' }}>New: Business Analytics! 🔥</h3>
+            <p style={{ margin: 0, color: '#546e7a', fontSize: '14px' }}>
+              Check your profit trends and sales reports in the new Analytics tab.
+            </p>
+          </div>
+          <button
+            onClick={handleAnalyticsClick}
             style={{
-              ...summaryCardStyle(
-                'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)',
-                '#a5d6a7'
-              ),
-              cursor: 'pointer',
-              transition: 'transform 0.2s'
+              padding: '12px 24px', borderRadius: '8px', background: '#1a237e',
+              color: 'white', border: 'none', fontWeight: 'bold', cursor: 'pointer'
             }}
-            onClick={() => onSelect('customers')}
-            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
           >
-            <div style={{ fontSize: '14px', color: '#2e7d32', marginBottom: '8px' }}>
-              Total Receivables
-            </div>
-            <div style={{ ...amountStyle, color: '#1b5e20' }}>
-              Rs. {formatAmount(stats.totalReceivables)}
-            </div>
-            <div style={{ fontSize: '12px', color: '#546e7a' }}>
-              {stats.totalCustomers} customers
-            </div>
-          </div>
-
-          {/* Total Payables */}
-          <div
-            style={{
-              ...summaryCardStyle(
-                'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)',
-                '#ffcc80'
-              ),
-              cursor: 'pointer',
-              transition: 'transform 0.2s'
-            }}
-            onClick={() => onSelect('suppliers')}
-            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-          >
-            <div style={{ fontSize: '14px', color: '#ef6c00', marginBottom: '8px' }}>
-              Total Payables
-            </div>
-            <div style={{ ...amountStyle, color: '#e65100' }}>
-              Rs. {formatAmount(stats.totalPayables)}
-            </div>
-            <div style={{ fontSize: '12px', color: '#546e7a' }}>
-              {stats.totalSuppliers} suppliers
-            </div>
-          </div>
-
-          {/* Total Expenses */}
-          <div
-            style={{
-              ...summaryCardStyle(
-                'linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%)',
-                '#f8bbd9'
-              ),
-              cursor: 'pointer',
-              transition: 'transform 0.2s'
-            }}
-            onClick={() => onSelect('expenses')}
-            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-          >
-            <div style={{ fontSize: '14px', color: '#c62828', marginBottom: '8px' }}>
-              Total Expenses
-            </div>
-            <div style={{ ...amountStyle, color: '#d32f2f' }}>
-              Rs. {formatAmount(stats.totalExpenses)}
-            </div>
-            <div style={{ fontSize: '12px', color: '#546e7a' }}>
-              {stats.totalExpenseCategories} categories
-            </div>
-          </div>
-
-          {/* Net Profit (No Link) */}
-          <div style={summaryCardStyle(
-            netProfit >= 0
-              ? 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)'
-              : 'linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%)',
-            netProfit >= 0 ? '#90caf9' : '#f8bbd9'
-          )}>
-            <div style={{
-              fontSize: '14px',
-              color: netProfit >= 0 ? '#1e88e5' : '#c2185b',
-              marginBottom: '8px'
-            }}>
-              Net Profit
-            </div>
-            <div style={{
-              ...amountStyle,
-              color: netProfit >= 0 ? '#1565c0' : '#ad1457'
-            }}>
-              Rs. {formatAmount(netProfit)}
-            </div>
-            <div style={{ fontSize: '12px', color: '#546e7a' }}>
-              Receivables - Payables - Expenses
-            </div>
-          </div>
+            Try It Now
+          </button>
         </div>
 
-        {/* Refresh Button */}
-        {!loading && (
-          <div style={refreshStyle} onClick={fetchStats}>
-            <div style={{ fontSize: isMobile ? '20px' : '24px' }}>↻</div>
-            <div style={{ fontSize: '16px', color: '#607d8b', marginTop: '8px' }}>
-              Refresh Stats
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
-}
+};
 
 export default Dashboard;

@@ -244,24 +244,25 @@ const ExpenseLedger = ({ expense, onBack }) => {
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%)',
+      background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
       display: 'flex',
       flexDirection: 'column',
       width: '100vw',
       margin: 0,
       padding: isMobile ? '0px 12px' : '24px',
       overflowX: 'hidden',
-      boxSizing: 'border-box'
+      boxSizing: 'border-box',
+      fontFamily: "'Inter', sans-serif"
     }}>
       <div style={{
         maxWidth: isMobile ? '100vw' : '1200px',
         margin: isMobile ? '0' : '0 auto',
         width: '100%',
         backgroundColor: '#ffffff',
-        borderRadius: isMobile ? '0' : '16px',
+        borderRadius: isMobile ? '0' : '24px',
         padding: isMobile ? '16px' : '32px',
-        boxShadow: isMobile ? 'none' : '0 8px 32px rgba(0,0,0,0.12)',
-        border: isMobile ? 'none' : '1px solid #e0e0e0',
+        boxShadow: isMobile ? 'none' : '0 4px 20px rgba(0,0,0,0.05)',
+        border: isMobile ? 'none' : '1px solid #f0f0f0',
         boxSizing: 'border-box'
       }}>
         {/* Back Button + Header */}
@@ -273,34 +274,36 @@ const ExpenseLedger = ({ expense, onBack }) => {
           flexDirection: isMobile ? 'column' : 'row'
         }}>
           <button onClick={onBack} style={{
-            padding: '12px 20px',
-            borderRadius: '999px',
-            border: '1px solid #cfd8dc',
-            backgroundColor: '#fafafa',
+            padding: '10px 20px',
+            borderRadius: '12px',
+            border: 'none',
+            backgroundColor: 'white',
             cursor: 'pointer',
             fontSize: '14px',
-            color: '#607d8b',
-            fontWeight: '500'
+            color: '#1a237e',
+            fontWeight: '600',
+            display: 'flex', alignItems: 'center', gap: '8px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
           }}>
-            ← Back to Expenses
+            ← Back
           </button>
-          <div>
+          <div style={{ flex: 1 }}>
             <h2 style={{
-              margin: '0 0 16px 0',
-              color: '#1a237e',
-              fontSize: isMobile ? '28px' : '32px',
+              margin: '0 0 8px 0',
+              color: '#c62828',
+              fontSize: isMobile ? '24px' : '28px',
               fontWeight: 'bold'
             }}>
-              Ledger for <span style={{ color: '#c62828', fontWeight: 'bold' }}>{expense.name}</span>
+              Expense: {expense.name}
             </h2>
             {/* Bold Colored Total Expenses */}
             <p style={{
               margin: 0,
-              fontSize: isMobile ? '18px' : '20px',
-              fontWeight: '800',
-              color: '#d32f2f'
+              fontSize: isMobile ? '16px' : '18px',
+              fontWeight: '600',
+              color: '#546e7a'
             }}>
-              Total Expenses: <span style={{ fontSize: isMobile ? '22px' : '24px', fontWeight: '900', color: '#b71c1c' }}>
+              Total Spent: <span style={{ fontSize: isMobile ? '20px' : '22px', fontWeight: '800', color: '#c62828' }}>
                 Rs. {formatAmount(totalExpenses)}
               </span>
             </p>
@@ -312,14 +315,15 @@ const ExpenseLedger = ({ expense, onBack }) => {
           display: 'flex',
           gap: isMobile ? '12px' : '16px',
           flexWrap: 'wrap',
-          marginBottom: isMobile ? '20px' : '24px',
+          marginBottom: isMobile ? '20px' : '32px',
           flexDirection: isMobile ? 'column' : 'row',
-          backgroundColor: '#f5f5f5',
+          backgroundColor: '#fafafa',
           padding: isMobile ? '16px' : '24px',
-          borderRadius: '16px'
+          borderRadius: '20px',
+          border: '1px solid #f0f0f0'
         }}>
           <div style={{ flex: isMobile ? '1 1 100%' : '0 0 140px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#37474f', fontSize: '14px' }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#455a64', fontSize: '12px' }}>
               Amount *
             </label>
             <input
@@ -330,16 +334,17 @@ const ExpenseLedger = ({ expense, onBack }) => {
               style={{
                 width: '100%',
                 padding: '12px 16px',
-                borderRadius: '10px',
-                border: '1px solid #cfd8dc',
+                borderRadius: '12px',
+                border: '1px solid #e0e0e0',
                 outline: 'none',
                 fontSize: '14px',
-                boxSizing: 'border-box'
+                boxSizing: 'border-box',
+                fontWeight: '500'
               }}
             />
           </div>
           <div style={{ flex: isMobile ? '1 1 100%' : '0 0 160px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#37474f', fontSize: '14px' }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#455a64', fontSize: '12px' }}>
               Date (yyyy-mm-dd)
             </label>
             <input
@@ -350,31 +355,33 @@ const ExpenseLedger = ({ expense, onBack }) => {
               style={{
                 width: '100%',
                 padding: '12px 16px',
-                borderRadius: '10px',
-                border: '1px solid #cfd8dc',
+                borderRadius: '12px',
+                border: '1px solid #e0e0e0',
                 outline: 'none',
                 fontSize: '14px',
-                boxSizing: 'border-box'
+                boxSizing: 'border-box',
+                fontWeight: '500'
               }}
             />
           </div>
           <div style={{ flex: isMobile ? '1 1 100%' : '1', minWidth: isMobile ? 'auto' : '140px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#37474f', fontSize: '14px' }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#455a64', fontSize: '12px' }}>
               Note (optional)
             </label>
             <input
               type="text"
-              placeholder="Note (optional)"
+              placeholder="Details..."
               value={note}
               onChange={(e) => setNote(e.target.value)}
               style={{
                 width: '100%',
                 padding: '12px 16px',
-                borderRadius: '10px',
-                border: '1px solid #cfd8dc',
+                borderRadius: '12px',
+                border: '1px solid #e0e0e0',
                 outline: 'none',
                 fontSize: '14px',
-                boxSizing: 'border-box'
+                boxSizing: 'border-box',
+                fontWeight: '500'
               }}
             />
           </div>
@@ -389,33 +396,34 @@ const ExpenseLedger = ({ expense, onBack }) => {
               onClick={addOrUpdateEntry}
               style={{
                 padding: '12px 24px',
-                borderRadius: '10px',
+                borderRadius: '12px',
                 border: 'none',
-                backgroundColor: '#f44336',
+                backgroundColor: '#c62828',
                 color: '#fff',
                 cursor: 'pointer',
                 fontWeight: '600',
                 fontSize: '14px',
                 whiteSpace: 'nowrap',
-                minHeight: '48px',
-                flex: isMobile ? '1 1 100%' : 'auto'
+                minHeight: '46px',
+                flex: isMobile ? '1 1 100%' : 'auto',
+                boxShadow: '0 4px 12px rgba(198, 40, 40, 0.2)'
               }}
             >
-              {editingEntry ? 'Update Entry' : 'Add Entry'}
+              {editingEntry ? 'Update' : 'Add Expense'}
             </button>
             {editingEntry && (
               <button
                 onClick={resetForm}
                 style={{
                   padding: '12px 24px',
-                  borderRadius: '10px',
-                  border: '1px solid #cfd8dc',
-                  backgroundColor: '#fafafa',
-                  color: '#607d8b',
+                  borderRadius: '12px',
+                  border: '1px solid #e0e0e0',
+                  backgroundColor: 'white',
+                  color: '#546e7a',
                   cursor: 'pointer',
-                  fontWeight: '500',
+                  fontWeight: '600',
                   fontSize: '14px',
-                  minHeight: '48px',
+                  minHeight: '46px',
                   flex: isMobile ? '1 1 100%' : 'auto'
                 }}
               >
@@ -434,21 +442,22 @@ const ExpenseLedger = ({ expense, onBack }) => {
             backgroundColor: '#ffebee',
             color: '#c62828',
             fontSize: '14px',
-            border: '1px solid #ffccdd'
+            border: '1px solid #ffccdd',
+            fontWeight: '500'
           }}>
             {message}
           </div>
         )}
 
-        {/* EXPORT SECTION - RED THEME */}
+        {/* EXPORT SECTION */}
         <div style={{
           marginBottom: isMobile ? '24px' : '32px',
           padding: isMobile ? '16px' : '24px',
-          backgroundColor: '#ffebee',
+          backgroundColor: '#fff',
           borderRadius: '16px',
-          border: '2px solid #f44336'
+          border: '1px solid #e0e0e0'
         }}>
-          <h4 style={{ margin: '0 0 20px 0', color: '#c62828', fontSize: isMobile ? '18px' : '20px' }}>
+          <h4 style={{ margin: '0 0 16px 0', color: '#c62828', fontSize: '16px', fontWeight: 'bold' }}>
             Export Ledger to PDF
           </h4>
           <div style={{
@@ -458,7 +467,7 @@ const ExpenseLedger = ({ expense, onBack }) => {
             alignItems: 'end'
           }}>
             <div>
-              <label style={{ display: 'block', fontSize: '13px', color: '#555', marginBottom: '6px', fontWeight: '500' }}>
+              <label style={{ display: 'block', fontSize: '12px', color: '#455a64', marginBottom: '6px', fontWeight: '600' }}>
                 From Date *
               </label>
               <input
@@ -467,9 +476,9 @@ const ExpenseLedger = ({ expense, onBack }) => {
                 value={exportStart}
                 onChange={handleExportDateChange(setExportStart)}
                 style={{
-                  padding: '12px 16px',
-                  borderRadius: '10px',
-                  border: '2px solid #f44336',
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #cfd8dc',
                   minWidth: isMobile ? '140px' : '160px',
                   fontSize: '14px',
                   boxSizing: 'border-box'
@@ -477,8 +486,8 @@ const ExpenseLedger = ({ expense, onBack }) => {
               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '13px', color: '#555', marginBottom: '6px', fontWeight: '500' }}>
-                To Date (optional)
+              <label style={{ display: 'block', fontSize: '12px', color: '#455a64', marginBottom: '6px', fontWeight: '600' }}>
+                To Date
               </label>
               <input
                 type="text"
@@ -486,8 +495,8 @@ const ExpenseLedger = ({ expense, onBack }) => {
                 value={exportEnd}
                 onChange={handleExportDateChange(setExportEnd)}
                 style={{
-                  padding: '12px 16px',
-                  borderRadius: '10px',
+                  padding: '10px 14px',
+                  borderRadius: '8px',
                   border: '1px solid #cfd8dc',
                   minWidth: isMobile ? '140px' : '160px',
                   fontSize: '14px',
@@ -499,15 +508,15 @@ const ExpenseLedger = ({ expense, onBack }) => {
               onClick={handleExportPDF}
               disabled={exportLoading || !exportStart}
               style={{
-                padding: '14px 28px',
-                borderRadius: '10px',
+                padding: '10px 24px',
+                borderRadius: '8px',
                 border: 'none',
-                backgroundColor: exportLoading || !exportStart ? '#bdbdbd' : '#f44336',
-                color: '#fff',
+                backgroundColor: exportLoading || !exportStart ? '#e0e0e0' : '#c62828',
+                color: exportLoading || !exportStart ? '#9e9e9e' : '#fff',
                 cursor: exportLoading || !exportStart ? 'not-allowed' : 'pointer',
                 fontWeight: '600',
                 fontSize: '14px',
-                minHeight: '52px',
+                minHeight: '42px',
                 whiteSpace: 'nowrap',
                 flex: isMobile ? '1 1 100%' : 'auto'
               }}
@@ -520,86 +529,76 @@ const ExpenseLedger = ({ expense, onBack }) => {
         {/* Ledger Table */}
         {loading ? (
           <p style={{ textAlign: 'center', color: '#78909c', fontSize: '16px', padding: '60px' }}>
-            Loading ledger...
+            Loading ledger key data...
           </p>
         ) : entries.length === 0 ? (
-          <p style={{ color: '#78909c', textAlign: 'center', padding: '60px', fontSize: '16px' }}>
-            No expense entries yet
+          <p style={{ color: '#78909c', textAlign: 'center', padding: '60px', fontSize: '14px', background: '#f9fafb', borderRadius: '12px' }}>
+            No expense entries yet. Add your first expense above.
           </p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{
               width: '100%',
-              borderCollapse: 'collapse',
+              borderCollapse: 'separate',
+              borderSpacing: '0',
               marginTop: '8px',
               borderRadius: '12px',
               overflow: 'hidden',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+              border: '1px solid #f0f0f0'
             }}>
               <thead>
-                <tr style={{ backgroundColor: '#ffebee' }}>
-                  <th style={{ border: '1px solid #e0e0e0', padding: isMobile ? '12px 8px' : '16px 12px', fontSize: '14px', fontWeight: '600', whiteSpace: 'nowrap', color: '#c62828' }}>
+                <tr style={{ backgroundColor: '#f8f9fa' }}>
+                  <th style={{ padding: '16px 12px', fontSize: '13px', fontWeight: '700', color: '#1a237e', borderBottom: '1px solid #e0e0e0', textAlign: 'left' }}>
                     Date
                   </th>
-                  <th style={{ border: '1px solid #e0e0e0', padding: isMobile ? '12px 8px' : '16px 12px', fontSize: '14px', fontWeight: '600', whiteSpace: 'nowrap', color: '#c62828' }}>
+                  <th style={{ padding: '16px 12px', fontSize: '13px', fontWeight: '700', color: '#1a237e', borderBottom: '1px solid #e0e0e0', textAlign: 'right' }}>
                     Amount
                   </th>
-                  <th style={{ border: '1px solid #e0e0e0', padding: isMobile ? '12px 8px' : '16px 12px', fontSize: '14px', fontWeight: '600', whiteSpace: 'nowrap', color: '#c62828' }}>
+                  <th style={{ padding: '16px 12px', fontSize: '13px', fontWeight: '700', color: '#1a237e', borderBottom: '1px solid #e0e0e0', textAlign: 'right' }}>
                     Running Total
                   </th>
-                  <th style={{ border: '1px solid #e0e0e0', padding: isMobile ? '12px 8px' : '16px 12px', fontSize: '14px', fontWeight: '600', whiteSpace: 'nowrap', color: '#c62828' }}>
+                  <th style={{ padding: '16px 12px', fontSize: '13px', fontWeight: '700', color: '#1a237e', borderBottom: '1px solid #e0e0e0', textAlign: 'left' }}>
                     Note
                   </th>
-                  <th style={{ border: '1px solid #e0e0e0', padding: isMobile ? '12px 8px' : '16px 12px', fontSize: '14px', fontWeight: '600', whiteSpace: 'nowrap', color: '#c62828' }}>
+                  <th style={{ padding: '16px 12px', fontSize: '13px', fontWeight: '700', color: '#1a237e', borderBottom: '1px solid #e0e0e0', textAlign: 'center' }}>
                     Actions
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {entries.map((entry) => (
+                {entries.map((entry, index) => (
                   <tr
                     key={entry.id}
                     style={{
-                      backgroundColor: entry.id === editingEntry?.id ? '#ffebee' : 'transparent',
+                      backgroundColor: entry.id === editingEntry?.id ? '#ffebee' : (index % 2 === 0 ? 'white' : '#fafafa'),
                       transition: 'background-color 0.2s'
                     }}
                   >
-                    <td style={{ border: '1px solid #e0e0e0', padding: isMobile ? '12px 8px' : '16px 12px', fontSize: '14px' }}>
+                    <td style={{ padding: '14px 12px', fontSize: '14px', color: '#37474f', borderBottom: '1px solid #f0f0f0' }}>
                       {entry.date}
                     </td>
-                    <td style={{
-                      border: '1px solid #e0e0e0',
-                      padding: isMobile ? '12px 8px' : '16px 12px',
-                      color: '#d32f2f',
-                      fontWeight: '600'
-                    }}>
+                    <td style={{ padding: '14px 12px', fontSize: '14px', fontWeight: '600', color: '#c62828', textAlign: 'right', borderBottom: '1px solid #f0f0f0' }}>
                       Rs. {formatAmount(entry.amount)}
                     </td>
-                    <td style={{
-                      border: '1px solid #e0e0e0',
-                      padding: isMobile ? '12px 8px' : '16px 12px',
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      color: '#b71c1c'
-                    }}>
+                    <td style={{ padding: '14px 12px', fontSize: '14px', fontWeight: '700', color: '#1a237e', textAlign: 'right', borderBottom: '1px solid #f0f0f0' }}>
                       Rs. {formatAmount(entry.runningTotal)}
                     </td>
-                    <td style={{ border: '1px solid #e0e0e0', padding: isMobile ? '12px 8px' : '16px 12px', fontSize: '14px', color: '#455a64' }}>
+                    <td style={{ padding: '14px 12px', fontSize: '14px', color: '#546e7a', borderBottom: '1px solid #f0f0f0' }}>
                       {entry.note || '-'}
                     </td>
-                    <td style={{ border: '1px solid #e0e0e0', padding: isMobile ? '12px 8px' : '16px 12px' }}>
-                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <td style={{ padding: '14px 12px', textAlign: 'center', borderBottom: '1px solid #f0f0f0' }}>
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                         <button
                           onClick={() => startEditEntry(entry)}
                           style={{
-                            padding: '8px 12px',
+                            padding: '6px 10px',
                             borderRadius: '6px',
-                            border: '1px solid #42a5f5',
+                            border: '1px solid #bbdefb',
                             backgroundColor: '#e3f2fd',
-                            color: '#1976d2',
+                            color: '#1565c0',
                             fontSize: '12px',
                             cursor: 'pointer',
-                            fontWeight: '500'
+                            fontWeight: '600'
                           }}
                         >
                           Edit
@@ -607,17 +606,17 @@ const ExpenseLedger = ({ expense, onBack }) => {
                         <button
                           onClick={() => handleDeleteEntry(entry.id)}
                           style={{
-                            padding: '8px 12px',
+                            padding: '6px 10px',
                             borderRadius: '6px',
-                            border: '1px solid #ef5350',
+                            border: '1px solid #ffcdd2',
                             backgroundColor: '#ffebee',
-                            color: '#d32f2f',
+                            color: '#c62828',
                             fontSize: '12px',
                             cursor: 'pointer',
-                            fontWeight: '500'
+                            fontWeight: '600'
                           }}
                         >
-                          Delete
+                          Del
                         </button>
                       </div>
                     </td>

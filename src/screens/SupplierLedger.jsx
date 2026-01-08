@@ -263,24 +263,25 @@ const SupplierLedger = ({ supplier, onBack }) => {
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #fffde7 0%, #e3f2fd 100%)',
+      background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
       display: 'flex',
       flexDirection: 'column',
       width: '100vw',
       margin: 0,
-      padding: isMobile ? '0px 12px 24px' : '0px 32px 24px',
+      padding: isMobile ? '0px 12px' : '24px',
       overflowX: 'hidden',
-      boxSizing: 'border-box'
+      boxSizing: 'border-box',
+      fontFamily: "'Inter', sans-serif"
     }}>
       <div style={{
         maxWidth: isMobile ? '100vw' : '1200px',
-        margin: isMobile ? '0 auto 0' : '0 auto',
+        margin: isMobile ? '0' : '0 auto',
         width: '100%',
-        backgroundColor: 'ffffff',
-        borderRadius: isMobile ? '0 16px' : '16px',
-        padding: isMobile ? '16px 32px' : '32px',
-        boxShadow: isMobile ? 'none' : '0 8px 32px rgba(0,0,0,0.12)',
-        border: isMobile ? 'none' : '1px solid #e0e0e0',
+        backgroundColor: '#ffffff',
+        borderRadius: isMobile ? '0' : '24px',
+        padding: isMobile ? '16px' : '32px',
+        boxShadow: isMobile ? 'none' : '0 4px 20px rgba(0,0,0,0.05)',
+        border: isMobile ? 'none' : '1px solid #f0f0f0',
         boxSizing: 'border-box'
       }}>
         {/* Back Button Header */}
@@ -292,91 +293,77 @@ const SupplierLedger = ({ supplier, onBack }) => {
           flexDirection: isMobile ? 'column' : 'row'
         }}>
           <button onClick={onBack} style={{
-            padding: '12px 20px',
-            borderRadius: '999px',
-            border: '1px solid #cfd8dc',
-            backgroundColor: 'fafafa',
+            padding: '10px 20px',
+            borderRadius: '12px',
+            border: 'none',
+            backgroundColor: 'white',
             cursor: 'pointer',
             fontSize: '14px',
-            color: '#607d8b',
-            fontWeight: '500'
+            color: '#1a237e',
+            fontWeight: '600',
+            display: 'flex', alignItems: 'center', gap: '8px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
           }}>
-            Back to Suppliers
+            ← Back
           </button>
           <div>
             <h2 style={{
-              margin: '0 0 16px 0',
+              margin: 0,
               color: '#1a237e',
-              fontSize: isMobile ? '28px' : '32px',
+              fontSize: isMobile ? '24px' : '28px',
               fontWeight: 'bold'
             }}>
-              Ledger for <span style={{ color: '#ef6c00', fontWeight: 'bold' }}>{supplier.name}</span>
+              Ledger: <span style={{ color: '#ef6c00' }}>{supplier.name}</span>
             </h2>
           </div>
         </div>
 
         {/* FIXED TOTALS CARD */}
         <div style={{
-          marginBottom: isMobile ? '20px' : '24px',
-          padding: isMobile ? '20px 16px 24px 28px' : '24px 28px',
-          background: 'linear-gradient(135deg, #fff3e0 0%, #fce4ec 100%)',
-          borderRadius: '16px',
-          border: '2px solid #fb8c00',
-          boxShadow: '0 4px 16px rgba(251, 140, 0, 0.15)'
+          marginBottom: isMobile ? '20px' : '32px',
+          padding: isMobile ? '20px' : '32px',
+          background: 'white',
+          borderRadius: '20px',
+          border: '1px solid #e0e0e0',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
+          background: 'linear-gradient(to right, #ffffff, #fff3e0)' // Subtle orange hint
         }}>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr',
+            gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3, 1fr)',
             gap: isMobile ? '16px' : '20px',
-            alignItems: 'end'
+            alignItems: 'center'
           }}>
-            <div style={{ textAlign: isMobile ? 'center' : 'left' }}>
-              <div style={{
-                fontSize: isMobile ? '14px' : '16px',
-                fontWeight: '700',
-                color: '#ef6c00',
-                marginBottom: '4px'
-              }}>
+            {/* Total Purchase */}
+            <div style={{ textAlign: 'center', padding: '16px', background: '#fff3e0', borderRadius: '16px' }}>
+              <div style={{ fontSize: '12px', fontWeight: '600', color: '#e65100', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 Total Purchase
               </div>
-              <div style={{
-                fontSize: isMobile ? '24px' : '28px',
-                fontWeight: '400',
-                color: '#e65100'
-              }}>
+              <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: 'bold', color: '#e65100', marginTop: '4px' }}>
                 {formatIndianCurrency(totalPurchase)}
               </div>
             </div>
-            <div style={{ textAlign: isMobile ? 'center' : 'left' }}>
-              <div style={{
-                fontSize: isMobile ? '14px' : '16px',
-                fontWeight: '700',
-                color: '#c62828',
-                marginBottom: '4px'
-              }}>
-                Total Payment
+
+            {/* Total Payment */}
+            <div style={{ textAlign: 'center', padding: '16px', background: '#ffebee', borderRadius: '16px' }}>
+              <div style={{ fontSize: '12px', fontWeight: '600', color: '#c62828', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Total Paid
               </div>
-              <div style={{
-                fontSize: isMobile ? '24px' : '28px',
-                fontWeight: '400',
-                color: '#b71c1c'
-              }}>
+              <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: 'bold', color: '#c62828', marginTop: '4px' }}>
                 {formatIndianCurrency(totalPayment)}
               </div>
             </div>
-            <div style={{ textAlign: isMobile ? 'center' : 'right' }}>
-              <div style={{
-                fontSize: isMobile ? '14px' : '16px',
-                fontWeight: '700',
-                color: '#1976d2',
-                marginBottom: '4px'
-              }}>
-                Balance
+
+            {/* Balance */}
+            <div style={{ textAlign: 'center', padding: '16px', background: '#e3f2fd', borderRadius: '16px', gridColumn: isMobile ? 'span 2' : 'auto' }}>
+              <div style={{ fontSize: '12px', fontWeight: '600', color: '#1565c0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Payable Balance
               </div>
               <div style={{
-                fontSize: isMobile ? '24px' : '28px',
-                fontWeight: '600',
-                color: balance >= 0 ? '#e65100' : '#d32f2f'
+                fontSize: isMobile ? '24px' : '32px',
+                fontWeight: '800',
+                color: balance >= 0 ? '#e65100' : '#d32f2f',
+                marginTop: '4px'
               }}>
                 {formatIndianCurrency(balance)}
               </div>
@@ -384,19 +371,20 @@ const SupplierLedger = ({ supplier, onBack }) => {
           </div>
         </div>
 
-        {/* Add/Edit Form - WHITE background like CustomerLedger */}
+        {/* Add/Edit Form */}
         <div style={{
           display: 'flex',
           gap: isMobile ? '12px' : '16px',
           flexWrap: 'wrap',
-          marginBottom: isMobile ? '20px' : '24px',
+          marginBottom: isMobile ? '20px' : '32px',
           flexDirection: isMobile ? 'column' : 'row',
-          backgroundColor: '#f5f5f5',  // WHITE/GRAY background like CustomerLedger
-          padding: isMobile ? '16px 24px' : '24px',
-          borderRadius: '16px'
+          backgroundColor: '#fafafa',
+          padding: isMobile ? '16px' : '24px',
+          borderRadius: '20px',
+          border: '1px solid #f0f0f0'
         }}>
           <div style={{ flex: isMobile ? '1 1 100%' : '0 0 140px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#37474f', fontSize: '14px' }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#455a64', fontSize: '12px' }}>
               Amount
             </label>
             <input
@@ -407,17 +395,18 @@ const SupplierLedger = ({ supplier, onBack }) => {
               style={{
                 width: '100%',
                 padding: '12px 16px',
-                borderRadius: '10px',
-                border: '1px solid #cfd8dc',
+                borderRadius: '12px',
+                border: '1px solid #e0e0e0',
                 outline: 'none',
                 fontSize: '14px',
-                boxSizing: 'border-box'
+                boxSizing: 'border-box',
+                fontWeight: '500'
               }}
             />
           </div>
 
           <div style={{ flex: isMobile ? '1 1 100%' : '0 0 120px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#37474f', fontSize: '14px' }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#455a64', fontSize: '12px' }}>
               Type
             </label>
             <select
@@ -426,11 +415,12 @@ const SupplierLedger = ({ supplier, onBack }) => {
               style={{
                 width: '100%',
                 padding: '12px 16px',
-                borderRadius: '10px',
-                border: '1px solid #cfd8dc',
-                backgroundColor: 'fff',
+                borderRadius: '12px',
+                border: '1px solid #e0e0e0',
+                backgroundColor: '#fff',
                 fontSize: '14px',
-                boxSizing: 'border-box'
+                boxSizing: 'border-box',
+                fontWeight: '500'
               }}
             >
               <option value="purchase">Purchase</option>
@@ -439,7 +429,7 @@ const SupplierLedger = ({ supplier, onBack }) => {
           </div>
 
           <div style={{ flex: isMobile ? '1 1 100%' : '0 0 160px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#37474f', fontSize: '14px' }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#455a64', fontSize: '12px' }}>
               Date (yyyy-mm-dd)
             </label>
             <input
@@ -450,32 +440,34 @@ const SupplierLedger = ({ supplier, onBack }) => {
               style={{
                 width: '100%',
                 padding: '12px 16px',
-                borderRadius: '10px',
-                border: '1px solid #cfd8dc',
+                borderRadius: '12px',
+                border: '1px solid #e0e0e0',
                 outline: 'none',
                 fontSize: '14px',
-                boxSizing: 'border-box'
+                boxSizing: 'border-box',
+                fontWeight: '500'
               }}
             />
           </div>
 
           <div style={{ flex: isMobile ? '1 1 100%' : '1', minWidth: isMobile ? 'auto' : '140px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#37474f', fontSize: '14px' }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#455a64', fontSize: '12px' }}>
               Note (optional)
             </label>
             <input
               type="text"
-              placeholder="Note (optional)"
+              placeholder="Details..."
               value={note}
               onChange={(e) => setNote(e.target.value)}
               style={{
                 width: '100%',
                 padding: '12px 16px',
-                borderRadius: '10px',
-                border: '1px solid #cfd8dc',
+                borderRadius: '12px',
+                border: '1px solid #e0e0e0',
                 outline: 'none',
                 fontSize: '14px',
-                boxSizing: 'border-box'
+                boxSizing: 'border-box',
+                fontWeight: '500'
               }}
             />
           </div>
@@ -491,33 +483,34 @@ const SupplierLedger = ({ supplier, onBack }) => {
               onClick={addOrUpdateEntry}
               style={{
                 padding: '12px 24px',
-                borderRadius: '10px',
+                borderRadius: '12px',
                 border: 'none',
-                backgroundColor: '#fb8c00',  // Orange button only
-                color: 'fff',
+                backgroundColor: '#ef6c00',
+                color: '#fff',
                 cursor: 'pointer',
                 fontWeight: '600',
                 fontSize: '14px',
                 whiteSpace: 'nowrap',
-                minHeight: '48px',
-                flex: isMobile ? '1 1 100%' : 'auto'
+                minHeight: '46px',
+                flex: isMobile ? '1 1 100%' : 'auto',
+                boxShadow: '0 4px 12px rgba(239, 108, 0, 0.2)'
               }}
             >
-              {editingEntry ? 'Update Entry' : 'Add Entry'}
+              {editingEntry ? 'Update' : 'Add Entry'}
             </button>
             {editingEntry && (
               <button
                 onClick={resetForm}
                 style={{
                   padding: '12px 24px',
-                  borderRadius: '10px',
-                  border: '1px solid #cfd8dc',
-                  backgroundColor: 'fafafa',
-                  color: '#607d8b',
+                  borderRadius: '12px',
+                  border: '1px solid #e0e0e0',
+                  backgroundColor: 'white',
+                  color: '#546e7a',
                   cursor: 'pointer',
-                  fontWeight: '500',
+                  fontWeight: '600',
                   fontSize: '14px',
-                  minHeight: '48px',
+                  minHeight: '46px',
                   flex: isMobile ? '1 1 100%' : 'auto'
                 }}
               >
@@ -623,133 +616,144 @@ const SupplierLedger = ({ supplier, onBack }) => {
 
         {loading ? (
           <p style={{ textAlign: 'center', color: '#78909c', fontSize: '16px', padding: '60px' }}>
-            Loading ledger...
+            Loading ledger key data...
           </p>
         ) : entries.length === 0 ? (
-          <p style={{ color: '#78909c', textAlign: 'center', padding: '60px', fontSize: '16px' }}>
-            No ledger entries
+          <p style={{ color: '#78909c', textAlign: 'center', padding: '60px', fontSize: '14px', background: '#f9fafb', borderRadius: '12px' }}>
+            No entries found. Add your first purchase above.
           </p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{
               width: '100%',
-              borderCollapse: 'collapse',
+              borderCollapse: 'separate',
+              borderSpacing: '0',
               marginTop: '8px',
               borderRadius: '12px',
               overflow: 'hidden',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+              border: '1px solid #f0f0f0'
             }}>
               <thead>
-                <tr style={{ backgroundColor: '#c2bfbfff' }}> {/* WHITE/GRAY header like CustomerLedger */}
+                <tr style={{ backgroundColor: '#f8f9fa' }}>
                   <th style={{
-                    border: '1px solid #e0e0e0',
-                    padding: isMobile ? '12px 8px' : '16px 12px',  // ✅ FIXED mobile padding
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    whiteSpace: 'nowrap',
-                    backgroundColor: 'eeeeee'  // ✅ WHITE header for ALL sizes
+                    padding: '16px 12px',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    color: '#1a237e',
+                    borderBottom: '1px solid #e0e0e0',
+                    textAlign: 'left'
                   }}>Date</th>
                   <th style={{
-                    border: '1px solid #e0e0e0',
-                    padding: isMobile ? '12px 8px' : '16px 12px',  // ✅ FIXED mobile padding
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    whiteSpace: 'nowrap',
-                    backgroundColor: 'eeeeee'  // ✅ WHITE header for ALL sizes
+                    padding: '16px 12px',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    color: '#1a237e',
+                    borderBottom: '1px solid #e0e0e0',
+                    textAlign: 'right'
                   }}>Purchase</th>
                   <th style={{
-                    border: '1px solid #e0e0e0',
-                    padding: isMobile ? '12px 8px 16px 12px' : '16px 12px',
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    whiteSpace: 'nowrap'
+                    padding: '16px 12px',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    color: '#1a237e',
+                    borderBottom: '1px solid #e0e0e0',
+                    textAlign: 'right'
                   }}>Payment</th>
                   <th style={{
-                    border: '1px solid #e0e0e0',
-                    padding: isMobile ? '12px 8px 16px 12px' : '16px 12px',
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    whiteSpace: 'nowrap'
+                    padding: '16px 12px',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    color: '#1a237e',
+                    borderBottom: '1px solid #e0e0e0',
+                    textAlign: 'right'
                   }}>Balance</th>
                   <th style={{
-                    border: '1px solid #e0e0e0',
-                    padding: isMobile ? '12px 8px 16px 12px' : '16px 12px',
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    whiteSpace: 'nowrap'
+                    padding: '16px 12px',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    color: '#1a237e',
+                    borderBottom: '1px solid #e0e0e0',
+                    textAlign: 'left'
                   }}>Details</th>
                   <th style={{
-                    border: '1px solid #e0e0e0',
-                    padding: isMobile ? '12px 8px 16px 12px' : '16px 12px',
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    whiteSpace: 'nowrap'
+                    padding: '16px 12px',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    color: '#1a237e',
+                    borderBottom: '1px solid #e0e0e0',
+                    textAlign: 'center'
                   }}>Actions</th>
                 </tr>
               </thead>
-
               <tbody>
-                {entries.map((entry) => (
+                {entries.map((entry, index) => (
                   <tr key={entry.id} style={{
-                    backgroundColor: entry.id === editingEntry?.id ? '#fff3e0' : 'transparent',
+                    backgroundColor: entry.id === editingEntry?.id ? '#fff3e0' : (index % 2 === 0 ? 'white' : '#fafafa'),
                     transition: 'background-color 0.2s'
                   }}>
                     <td style={{
-                      border: '1px solid #e0e0e0',
-                      padding: isMobile ? '12px 8px 16px 12px' : '16px 12px',
-                      fontSize: '14px'
+                      padding: '14px 12px',
+                      fontSize: '14px',
+                      color: '#37474f',
+                      borderBottom: '1px solid #f0f0f0'
                     }}>
                       {entry.date}
                     </td>
                     <td style={{
-                      border: '1px solid #e0e0e0',
-                      padding: isMobile ? '12px 8px 16px 12px' : '16px 12px',
-                      color: entry.type === 'purchase' ? '#ef6c00' : '#9e9e9e',
-                      fontWeight: entry.type === 'purchase' ? '600' : '400'
+                      padding: '14px 12px',
+                      fontSize: '14px',
+                      fontWeight: entry.type === 'purchase' ? '600' : '400',
+                      color: entry.type === 'purchase' ? '#ef6c00' : '#b0bec5',
+                      textAlign: 'right',
+                      borderBottom: '1px solid #f0f0f0'
                     }}>
                       {entry.type === 'purchase' ? formatAmount(entry.amount) : '-'}
                     </td>
                     <td style={{
-                      border: '1px solid #e0e0e0',
-                      padding: isMobile ? '12px 8px 16px 12px' : '16px 12px',
-                      color: entry.type === 'payment' ? '#c62828' : '#9e9e9e',
-                      fontWeight: entry.type === 'payment' ? '600' : '400'
+                      padding: '14px 12px',
+                      fontSize: '14px',
+                      fontWeight: entry.type === 'payment' ? '600' : '400',
+                      color: entry.type === 'payment' ? '#c62828' : '#b0bec5',
+                      textAlign: 'right',
+                      borderBottom: '1px solid #f0f0f0'
                     }}>
                       {entry.type === 'payment' ? formatAmount(entry.amount) : '-'}
                     </td>
                     <td style={{
-                      border: '1px solid #e0e0e0',
-                      padding: isMobile ? '12px 8px 16px 12px' : '16px 12px',
+                      padding: '14px 12px',
                       fontSize: '14px',
-                      fontWeight: '600',
-                      color: entry.runningBalance >= 0 ? '#e65100' : '#d32f2f'
+                      fontWeight: '700',
+                      color: entry.runningBalance >= 0 ? '#e65100' : '#d32f2f',
+                      textAlign: 'right',
+                      borderBottom: '1px solid #f0f0f0'
                     }}>
                       {formatAmount(entry.runningBalance)}
                     </td>
                     <td style={{
-                      border: '1px solid #e0e0e0',
-                      padding: isMobile ? '12px 8px 16px 12px' : '16px 12px',
+                      padding: '14px 12px',
                       fontSize: '14px',
-                      color: '#455a64'
+                      color: '#455a64',
+                      borderBottom: '1px solid #f0f0f0'
                     }}>
                       {entry.note || '-'}
                     </td>
                     <td style={{
-                      border: '1px solid #e0e0e0',
-                      padding: isMobile ? '12px 8px 16px 12px' : '16px 12px'
+                      padding: '14px 12px',
+                      textAlign: 'center',
+                      borderBottom: '1px solid #f0f0f0'
                     }}>
-                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                         <button
                           onClick={() => startEditEntry(entry)}
                           style={{
-                            padding: '8px 12px',
+                            padding: '6px 10px',
                             borderRadius: '6px',
-                            border: '1px solid #42a5f5',
+                            border: '1px solid #bbdefb',
                             backgroundColor: '#e3f2fd',
-                            color: '#1976d2',
+                            color: '#1565c0',
                             fontSize: '12px',
                             cursor: 'pointer',
-                            fontWeight: '500'
+                            fontWeight: '600'
                           }}
                         >
                           Edit
@@ -757,17 +761,17 @@ const SupplierLedger = ({ supplier, onBack }) => {
                         <button
                           onClick={() => handleDeleteEntry(entry.id)}
                           style={{
-                            padding: '8px 12px',
+                            padding: '6px 10px',
                             borderRadius: '6px',
-                            border: '1px solid #ef5350',
+                            border: '1px solid #ffcdd2',
                             backgroundColor: '#ffebee',
-                            color: '#d32f2f',
+                            color: '#c62828',
                             fontSize: '12px',
                             cursor: 'pointer',
-                            fontWeight: '500'
+                            fontWeight: '600'
                           }}
                         >
-                          Delete
+                          Del
                         </button>
                       </div>
                     </td>

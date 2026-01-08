@@ -207,24 +207,24 @@ function Suppliers({ goBack }) {
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #fff3e0 0%, #fce4ec 100%)',
+      background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
       display: 'flex',
       flexDirection: 'column',
-      width: '100vw',
-      margin: 0,
-      padding: isMobile ? '0px 12px' : '24px',
+      width: '100%',
+      padding: isMobile ? '16px' : '32px',
       overflowX: 'hidden',
-      boxSizing: 'border-box'
+      boxSizing: 'border-box',
+      fontFamily: "'Inter', sans-serif"
     }}>
       <div style={{
-        maxWidth: isMobile ? '100vw' : '1000px',
-        margin: isMobile ? '0' : '0 auto',
+        maxWidth: '1200px',
+        margin: '0 auto',
         width: '100%',
         backgroundColor: '#ffffff',
-        borderRadius: isMobile ? '0' : '16px',
-        padding: isMobile ? '16px' : '32px',
-        boxShadow: isMobile ? 'none' : '0 8px 32px rgba(0,0,0,0.12)',
-        border: isMobile ? 'none' : '1px solid #e0e0e0',
+        borderRadius: '24px',
+        padding: isMobile ? '20px' : '32px',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
+        border: '1px solid #f0f0f0',
         boxSizing: 'border-box'
       }}>
         {/* Header */}
@@ -236,21 +236,33 @@ function Suppliers({ goBack }) {
           flexDirection: isMobile ? 'column' : 'row'
         }}>
           <button onClick={goBack} style={{
-            padding: '8px 16px',
-            borderRadius: '999px',
-            border: '1px solid #cfd8dc',
-            backgroundColor: '#fafafa',
+            padding: '10px 20px',
+            borderRadius: '12px',
+            border: 'none',
+            backgroundColor: 'white',
             cursor: 'pointer',
             fontSize: '14px',
-            color: '#607d8b'
+            color: '#1a237e',
+            fontWeight: '600',
+            display: 'flex', alignItems: 'center', gap: '8px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
           }}>
             ← Back
           </button>
-          <div>
-            <h1 style={{ margin: '0 0 8px 0', color: '#1a237e', fontSize: isMobile ? '28px' : '32px' }}>
+          <div style={{ flex: 1 }}>
+            <h1 style={{
+              margin: '0 0 8px 0',
+              color: '#d84315',
+              fontSize: isMobile ? '24px' : '28px',
+              fontWeight: 'bold'
+            }}>
               Suppliers
             </h1>
-            <p style={{ color: '#546e7a', margin: 0, fontSize: isMobile ? '14px' : '16px' }}>
+            <p style={{
+              color: '#546e7a',
+              margin: 0,
+              fontSize: isMobile ? '14px' : '16px'
+            }}>
               Manage your suppliers and track payables
             </p>
           </div>
@@ -259,48 +271,54 @@ function Suppliers({ goBack }) {
         {/* Overall Stats Card */}
         <div style={{
           marginBottom: isMobile ? '24px' : '32px',
-          padding: isMobile ? '20px' : '28px',
-          background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)',
-          borderRadius: '16px',
-          border: '2px solid #fb8c00',
-          boxShadow: '0 8px 24px rgba(251, 140, 0, 0.15)'
+          padding: isMobile ? '20px' : '32px',
+          background: 'white',
+          borderRadius: '20px',
+          border: '1px solid #e0e0e0',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
+          background: 'linear-gradient(to right, #ffffff, #fff3e0)' // Subtle orange hint
         }}>
-          <h3 style={{ margin: '0 0 20px 0', color: '#ef6c00', fontSize: isMobile ? '20px' : '24px' }}>
-            Overall Suppliers Summary
+          <h3 style={{
+            margin: '0 0 20px 0',
+            color: '#ef6c00',
+            fontSize: isMobile ? '18px' : '20px',
+            fontWeight: 'bold'
+          }}>
+            Overview
           </h3>
           {loadingStats ? (
-            <p style={{ color: '#fb8c00', margin: 0, fontSize: '16px', textAlign: 'center' }}>
-              Loading stats...
+            <p style={{ color: '#fb8c00', margin: 0, fontSize: '14px', textAlign: 'center' }}>
+              Loading summary...
             </p>
           ) : (
             <div style={{
               display: 'grid',
-              gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: isMobile ? '12px' : '20px'
+              gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)',
+              gap: isMobile ? '16px' : '20px'
             }}>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: isMobile ? '24px' : '28px', fontWeight: '700', color: '#2e7d32', marginBottom: '8px' }}>
+              <div style={{ textAlign: 'center', padding: '16px', background: '#ffebee', borderRadius: '16px' }}>
+                <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: 'bold', color: '#c62828', marginBottom: '4px' }}>
                   Rs. {formatAmount(overallStats.totalPurchases)}
                 </div>
-                <div style={{ color: '#4caf50', fontSize: '14px' }}>Total Purchases</div>
+                <div style={{ color: '#c62828', fontSize: '12px', fontWeight: '600', textTransform: 'uppercase' }}>Total Purchases</div>
               </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: isMobile ? '24px' : '28px', fontWeight: '700', color: '#c62828', marginBottom: '8px' }}>
+              <div style={{ textAlign: 'center', padding: '16px', background: '#e8f5e8', borderRadius: '16px' }}>
+                <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: 'bold', color: '#2e7d32', marginBottom: '4px' }}>
                   Rs. {formatAmount(overallStats.totalPayments)}
                 </div>
-                <div style={{ color: '#d32f2f', fontSize: '14px' }}>Total Payments</div>
+                <div style={{ color: '#2e7d32', fontSize: '12px', fontWeight: '600', textTransform: 'uppercase' }}>Paid</div>
               </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: isMobile ? '24px' : '28px', fontWeight: '700', color: '#1976d2', marginBottom: '8px' }}>
+              <div style={{ textAlign: 'center', padding: '16px', background: '#e3f2fd', borderRadius: '16px' }}>
+                <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: 'bold', color: '#1565c0', marginBottom: '4px' }}>
                   Rs. {formatAmount(overallStats.totalBalance)}
                 </div>
-                <div style={{ color: '#1e88e5', fontSize: '14px' }}>Remaining Balance</div>
+                <div style={{ color: '#1565c0', fontSize: '12px', fontWeight: '600', textTransform: 'uppercase' }}>Payable</div>
               </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: isMobile ? '24px' : '28px', fontWeight: '700', color: '#424242', marginBottom: '8px' }}>
+              <div style={{ textAlign: 'center', padding: '16px', background: '#fafafa', borderRadius: '16px' }}>
+                <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: 'bold', color: '#455a64', marginBottom: '4px' }}>
                   {overallStats.totalSuppliers}
                 </div>
-                <div style={{ color: '#757575', fontSize: '14px' }}>Total Suppliers</div>
+                <div style={{ color: '#455a64', fontSize: '12px', fontWeight: '600', textTransform: 'uppercase' }}>Suppliers</div>
               </div>
             </div>
           )}
@@ -313,12 +331,13 @@ function Suppliers({ goBack }) {
           flexWrap: 'wrap',
           marginBottom: isMobile ? '24px' : '32px',
           flexDirection: isMobile ? 'column' : 'row',
-          backgroundColor: '#f5f5f5',
+          backgroundColor: '#fafafa',
           padding: isMobile ? '16px' : '24px',
-          borderRadius: '16px'
+          borderRadius: '20px',
+          border: '1px solid #f0f0f0'
         }}>
           <div style={{ flex: isMobile ? '1 1 100%' : '1 1 220px', minWidth: isMobile ? 'auto' : '220px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#37474f' }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#455a64', fontSize: '12px' }}>
               Supplier Name *
             </label>
             <input
@@ -334,16 +353,17 @@ function Suppliers({ goBack }) {
               style={{
                 width: '100%',
                 padding: '12px 16px',
-                borderRadius: '10px',
-                border: editingSupplier && !editingSupplier.name.trim() ? '2px solid #ef5350' : '1px solid #cfd8dc',
+                borderRadius: '12px',
+                border: editingSupplier && !editingSupplier.name.trim() ? '2px solid #ef5350' : '1px solid #e0e0e0',
                 outline: 'none',
                 fontSize: '14px',
-                boxSizing: 'border-box'
+                boxSizing: 'border-box',
+                fontWeight: '500'
               }}
             />
           </div>
           <div style={{ flex: isMobile ? '1 1 100%' : '1 1 220px', minWidth: isMobile ? 'auto' : '220px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#37474f' }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#455a64', fontSize: '12px' }}>
               Phone (optional)
             </label>
             <input
@@ -359,11 +379,12 @@ function Suppliers({ goBack }) {
               style={{
                 width: '100%',
                 padding: '12px 16px',
-                borderRadius: '10px',
-                border: '1px solid #cfd8dc',
+                borderRadius: '12px',
+                border: '1px solid #e0e0e0',
                 outline: 'none',
                 fontSize: '14px',
-                boxSizing: 'border-box'
+                boxSizing: 'border-box',
+                fontWeight: '500'
               }}
             />
           </div>
@@ -374,18 +395,19 @@ function Suppliers({ goBack }) {
                 disabled={!editingSupplier.name.trim()}
                 style={{
                   padding: '12px 24px',
-                  borderRadius: '10px',
+                  borderRadius: '12px',
                   border: 'none',
-                  backgroundColor: editingSupplier.name.trim() ? '#fb8c00' : '#bdbdbd',
-                  color: '#fff',
+                  backgroundColor: editingSupplier.name.trim() ? '#fb8c00' : '#e0e0e0',
+                  color: editingSupplier.name.trim() ? '#fff' : '#9e9e9e',
                   cursor: editingSupplier.name.trim() ? 'pointer' : 'not-allowed',
-                  fontWeight: '500',
+                  fontWeight: '600',
                   fontSize: '14px',
                   whiteSpace: 'nowrap',
-                  flex: isMobile ? '1 1 100%' : '0 0 auto'
+                  flex: isMobile ? '1 1 100%' : '0 0 auto',
+                  height: '46px', alignSelf: 'flex-end'
                 }}
               >
-                Update Supplier
+                Update
               </button>
               <button
                 onClick={() => {
@@ -395,13 +417,15 @@ function Suppliers({ goBack }) {
                 }}
                 style={{
                   padding: '12px 24px',
-                  borderRadius: '10px',
-                  border: '1px solid #cfd8dc',
-                  backgroundColor: '#fafafa',
-                  color: '#607d8b',
+                  borderRadius: '12px',
+                  border: '1px solid #e0e0e0',
+                  backgroundColor: 'white',
+                  color: '#546e7a',
                   cursor: 'pointer',
                   fontSize: '14px',
-                  flex: isMobile ? '1 1 100%' : '0 0 auto'
+                  fontWeight: '600',
+                  flex: isMobile ? '1 1 100%' : '0 0 auto',
+                  height: '46px', alignSelf: 'flex-end'
                 }}
               >
                 Cancel
@@ -413,15 +437,17 @@ function Suppliers({ goBack }) {
               disabled={!name.trim()}
               style={{
                 padding: '12px 24px',
-                borderRadius: '10px',
+                borderRadius: '12px',
                 border: 'none',
-                backgroundColor: name.trim() ? '#fb8c00' : '#bdbdbd',
-                color: '#fff',
+                backgroundColor: name.trim() ? '#fb8c00' : '#e0e0e0',
+                color: name.trim() ? '#fff' : '#9e9e9e',
                 cursor: name.trim() ? 'pointer' : 'not-allowed',
-                fontWeight: '500',
+                fontWeight: '600',
                 fontSize: '14px',
                 whiteSpace: 'nowrap',
-                flex: isMobile ? '1 1 100%' : '0 0 auto'
+                flex: isMobile ? '1 1 100%' : '0 0 auto',
+                height: '46px', alignSelf: 'flex-end',
+                boxShadow: name.trim() ? '0 4px 12px rgba(251, 140, 0, 0.2)' : 'none'
               }}
             >
               Add Supplier
@@ -434,88 +460,96 @@ function Suppliers({ goBack }) {
           <div style={{
             marginBottom: '20px',
             padding: '12px 16px',
-            borderRadius: '10px',
+            borderRadius: '12px',
             backgroundColor: '#fff3e0',
             color: '#ef6c00',
             fontSize: '14px',
-            border: '1px solid #ffe0b2'
+            border: '1px solid #ffe0b2',
+            fontWeight: '500'
           }}>
             {message}
           </div>
         )}
 
         {/* Supplier List */}
-        <h3 style={{ marginBottom: isMobile ? '20px' : '24px', color: '#1a237e', fontSize: isMobile ? '20px' : '24px' }}>
+        <h3 style={{ marginBottom: isMobile ? '20px' : '24px', color: '#1a237e', fontSize: isMobile ? '20px' : '22px', fontWeight: 'bold' }}>
           Supplier List ({suppliers.length})
         </h3>
         {suppliers.length === 0 ? (
           <div style={{
-            padding: isMobile ? '32px 16px' : '48px 24px',
+            padding: isMobile ? '40px 20px' : '60px',
             textAlign: 'center',
-            color: '#78909c',
+            color: '#90a4ae',
             backgroundColor: '#fafafa',
-            borderRadius: '16px',
-            border: '1px dashed #cfd8dc'
+            borderRadius: '20px',
+            border: '1px dashed #cfd8dc',
+            fontSize: '14px'
           }}>
             No suppliers yet. Add your first supplier above.
           </div>
         ) : (
           <div style={{
             display: 'grid',
-            gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(360px, 1fr))',
-            gap: isMobile ? '12px' : '20px'
+            gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(340px, 1fr))',
+            gap: isMobile ? '16px' : '20px'
           }}>
             {suppliers.map(s => (
               <div
                 key={s.id}
                 style={{
-                  borderRadius: '16px',
-                  padding: isMobile ? '16px' : '24px',
-                  backgroundColor: '#f8f9fa',
-                  border: '1px solid #e0e0e0',
+                  borderRadius: '20px',
+                  padding: isMobile ? '20px' : '24px',
+                  backgroundColor: 'white',
+                  border: '1px solid #f0f0f0',
                   cursor: 'pointer',
-                  transition: 'all 0.3s',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-                  boxSizing: 'border-box'
+                  transition: 'all 0.2s',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
+                  boxSizing: 'border-box',
+                  position: 'relative',
+                  overflow: 'hidden'
                 }}
                 onClick={() => handleSelectSupplier(s)}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-6px)';
-                  e.currentTarget.style.boxShadow = '0 12px 32px rgba(239,108,0,0.2)';
+                  e.currentTarget.style.transform = 'translateY(-4px)';
+                  e.currentTarget.style.boxShadow = '0 12px 24px rgba(0,0,0,0.08)';
+                  e.currentTarget.style.borderColor = '#fb8c00';
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.03)';
+                  e.currentTarget.style.borderColor = '#f0f0f0';
                 }}
               >
-                <div style={{ fontSize: isMobile ? '18px' : '20px', fontWeight: '600', color: '#ef6c00', marginBottom: '12px' }}>
+                <div style={{ fontSize: isMobile ? '18px' : '20px', fontWeight: '700', color: '#ef6c00', marginBottom: '8px' }}>
                   {s.name}
                 </div>
-                {s.phone && (
-                  <div style={{ color: '#546e7a', fontSize: isMobile ? '14px' : '15px', marginBottom: '16px' }}>
+                {s.phone ? (
+                  <div style={{ color: '#546e7a', fontSize: isMobile ? '13px' : '14px', marginBottom: '20px', fontWeight: '500' }}>
                     {s.phone}
                   </div>
+                ) : (
+                  <div style={{ color: '#b0bec5', fontSize: isMobile ? '13px' : '14px', marginBottom: '20px', fontStyle: 'italic' }}>
+                    No phone number
+                  </div>
                 )}
-                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+
+                <div style={{ display: 'flex', gap: '12px', borderTop: '1px solid #f0f0f0', paddingTop: '16px', marginTop: 'auto' }}>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       startEditSupplier(s);
                     }}
-                    title="Edit Supplier"
                     style={{
-                      padding: '8px 12px',
+                      padding: '8px 16px',
                       borderRadius: '8px',
-                      border: '1px solid #42a5f5',
-                      backgroundColor: '#e3f2fd',
+                      border: '1px solid #e0e0e0',
+                      backgroundColor: 'white',
                       color: '#1976d2',
-                      fontSize: '13px',
-                      fontWeight: '500',
+                      fontSize: '12px',
+                      fontWeight: '600',
                       cursor: 'pointer',
-                      transition: 'all 0.2s'
+                      flex: 1
                     }}
-                    onMouseEnter={(e) => e.target.style.backgroundColor = '#bbdefb'}
-                    onMouseLeave={(e) => e.target.style.backgroundColor = '#e3f2fd'}
                   >
                     Edit
                   </button>
@@ -524,32 +558,20 @@ function Suppliers({ goBack }) {
                       e.stopPropagation();
                       handleDeleteSupplier(s.id);
                     }}
-                    title="Delete Supplier"
                     style={{
-                      padding: '8px 12px',
+                      padding: '8px 16px',
                       borderRadius: '8px',
-                      border: '1px solid #ef5350',
+                      border: '1px solid #ffebee',
                       backgroundColor: '#ffebee',
                       color: '#d32f2f',
-                      fontSize: '13px',
-                      fontWeight: '500',
+                      fontSize: '12px',
+                      fontWeight: '600',
                       cursor: 'pointer',
-                      transition: 'all 0.2s'
+                      flex: 1
                     }}
-                    onMouseEnter={(e) => e.target.style.backgroundColor = '#fcdd2'}
-                    onMouseLeave={(e) => e.target.style.backgroundColor = '#ffebee'}
                   >
                     Delete
                   </button>
-                </div>
-                <div style={{
-                  marginTop: '16px',
-                  paddingTop: '16px',
-                  borderTop: '1px solid #e0e0e0',
-                  fontSize: '13px',
-                  color: '#9e9e9e'
-                }}>
-                  Click card to view ledger
                 </div>
               </div>
             ))}
