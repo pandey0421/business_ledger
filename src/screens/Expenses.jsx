@@ -50,8 +50,19 @@ function Expenses({ goBack }) {
 
 
       const results = await Promise.all(expensesData.map(async (expense) => {
-        const ledgerRef = collection(db, 'expenses', expense.id, 'ledger');
-        const ledgerSnapshot = await getDocs(ledgerRef);
+        // Check User Scope first
+        let ledgerRef = collection(db, 'users', userId, 'expenses', expense.id, 'ledger');
+        let ledgerSnapshot = await getDocs(ledgerRef);
+
+        // If empty, check Legacy Root scope (just in case data is there)
+        if (ledgerSnapshot.empty) {
+          const legacyRef = collection(db, 'expenses', expense.id, 'ledger');
+          const legacySnap = await getDocs(legacyRef);
+          if (!legacySnap.empty) {
+            ledgerSnapshot = legacySnap;
+          }
+        }
+
         let categoryExpenses = 0;
         ledgerSnapshot.docs.forEach(ledgerDoc => {
           categoryExpenses += Number(ledgerDoc.data().amount) || 0;

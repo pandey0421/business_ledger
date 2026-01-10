@@ -1,23 +1,32 @@
 import React, { useEffect, useState } from 'react';
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { collection, addDoc, query, orderBy, limit, startAfter, getDocs, getCountFromServer, serverTimestamp, doc, updateDoc, increment, onSnapshot, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { db, auth } from '../firebase';
 import { exportLedgerToPDF, formatIndianCurrency } from '../utils/pdfExport';
 
 const ExpenseLedger = ({ expense, onBack }) => {
+  // State
   const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [lastVisible, setLastVisible] = useState(null);
+  const [totalTransactionCount, setTotalTransactionCount] = useState(0);
+
+  // Realtime Total (Total Spent)
+  const [realtimeTotal, setRealtimeTotal] = useState(expense?.totalAmount || 0);
+  const [userInteractedTotal, setUserInteractedTotal] = useState(null);
+
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState('');
   const [note, setNote] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [totalExpenses, setTotalExpenses] = useState(0);
   const [editingEntry, setEditingEntry] = useState(null);
   const [message, setMessage] = useState('');
+
   const [exportStart, setExportStart] = useState('');
   const [exportEnd, setExportEnd] = useState('');
   const [exportLoading, setExportLoading] = useState(false);
-  const [isMobile, setIsMobile] = useState(false); // Mobile responsive hook
+  const [isMobile, setIsMobile] = useState(false);
 
-  // Mobile responsive detection
+  // Mobile check
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth <= 768);
     checkMobile();
@@ -25,16 +34,225 @@ const ExpenseLedger = ({ expense, onBack }) => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  const formatAmount = (num) => {
+    try {
+      return new Intl.NumberFormat('en-IN').format(num);
+    } catch (e) {
+      return num;
+    }
+  };
+
+  // 1. Listen for Realtime Total Updates
+  useEffect(() => {
+    if (!expense?.id || !expense?.userId) return;
+    const unsub = onSnapshot(doc(db, 'users', expense.userId, 'expenses', expense.id), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setRealtimeTotal(data.totalAmount || 0);
+      }
+    });
+    return () => unsub();
+  }, [expense?.id, expense?.userId]);
+
+  const displayTotal = userInteractedTotal !== null ? userInteractedTotal : realtimeTotal;
+
+  // 2. Initial Ledger Fetch (Pagination)
+  useEffect(() => {
+    const initLedger = async () => {
+      setLoading(true);
+      if (!expense?.id || !expense?.userId) {
+        console.warn("Missing ID or UserID for ledger init");
+        setLoading(false);
+        return;
+      }
+      try {
+        const ledgerRef = collection(db, 'users', expense.userId, 'expenses', expense.id, 'ledger');
+        // Get Count
+        const countSnap = await getCountFromServer(ledgerRef);
+        setTotalTransactionCount(countSnap.data().count);
+
+        // Get First Page
+        const q = query(
+          ledgerRef,
+          orderBy('date', 'desc'),
+
+          limit(10)
+        );
+        const snap = await getDocs(q);
+        const fetchedEntries = snap.docs
+          .filter(d => !d.data().isDeleted)
+          .map(d => ({ id: d.id, ...d.data() }));
+
+        setEntries(fetchedEntries);
+        setLastVisible(snap.docs[snap.docs.length - 1]);
+      } catch (err) {
+        console.error("Error fetching ledger:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    initLedger();
+  }, [expense?.id, expense?.userId]);
+
+  // 3. Robust Recalculate (Self-Healing)
+  const recalculateTotals = async (isManual = false) => {
+    if (!expense?.id || !expense?.userId) return;
+    if (!isManual && (loading || totalTransactionCount === 0)) return;
+    if (!isManual && realtimeTotal > 0 && !userInteractedTotal) return; // Skip if looks good
+
+    if (isManual) setMessage('Recalculating totals...');
+    console.log(`Starting ${isManual ? 'MANUAL' : 'Auto'} Recalculation...`);
+
+    try {
+      const snap = await getDocs(collection(db, 'users', expense.userId, 'expenses', expense.id, 'ledger'));
+      let sum = 0;
+      let lastDate = null;
+      snap.docs.forEach(d => {
+        const da = d.data();
+        if (!da.isDeleted) {
+          sum += Number(da.amount) || 0;
+          if (da.date && (!lastDate || da.date > lastDate)) lastDate = da.date;
+        }
+      });
+
+      setUserInteractedTotal(sum);
+
+      // Persist
+      const payload = {
+        totalAmount: sum,
+        lastActivityDate: lastDate,
+        updatedAt: serverTimestamp()
+      };
+
+      await updateDoc(doc(db, 'users', expense.userId, 'expenses', expense.id), payload);
+
+      if (isManual) setMessage('Totals updated successfully');
+
+    } catch (err) {
+      console.error("Recalc failed", err);
+      if (isManual) setMessage('Recalculation failed');
+    }
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => recalculateTotals(false), 2000);
+    return () => clearTimeout(timer);
+  }, [expense?.id, expense?.userId, loading, totalTransactionCount]);
+
+  const [legacyCount, setLegacyCount] = useState(0);
+  const [migrating, setMigrating] = useState(false);
+
+  // 4. Load More
+  const fetchMoreEntries = async () => {
+    if (!lastVisible || !expense?.userId) return;
+    setLoadingMore(true);
+    try {
+      const q = query(
+        collection(db, 'users', expense.userId, 'expenses', expense.id, 'ledger'),
+        orderBy('date', 'desc'),
+        startAfter(lastVisible),
+        limit(10)
+      );
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const newEntries = snap.docs
+          .filter(d => !d.data().isDeleted)
+          .map(d => ({ id: d.id, ...d.data() }));
+        setEntries(prev => [...prev, ...newEntries]);
+        setLastVisible(snap.docs[snap.docs.length - 1]);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  // CHECK LEGACY DATA (From Root Collection)
+  useEffect(() => {
+    const checkLegacy = async () => {
+      if (!expense?.id || entries.length > 0) return;
+      try {
+        const legacyRef = collection(db, 'expenses', expense.id, 'ledger');
+        const countSnap = await getCountFromServer(legacyRef);
+        setLegacyCount(countSnap.data().count);
+      } catch (e) {
+        console.log("Legacy check failed", e);
+      }
+    };
+    if (!loading && entries.length === 0) {
+      checkLegacy();
+    }
+  }, [expense?.id, entries.length, loading]);
+
+  const migrateLegacyData = async () => {
+    if (!expense?.id || !expense?.userId) return;
+    setMigrating(true);
+    setMessage("Migrating data...");
+
+    try {
+      const legacyRef = collection(db, 'expenses', expense.id, 'ledger');
+      const snap = await getDocs(legacyRef);
+      const newLedgerRef = collection(db, 'users', expense.userId, 'expenses', expense.id, 'ledger');
+
+      const batch = writeBatch(db);
+      let count = 0;
+      let totalSum = 0;
+      let lastDate = null;
+
+      snap.docs.forEach(d => {
+        const data = d.data();
+        const amount = Number(data.amount) || 0;
+        totalSum += amount;
+
+        if (data.date && (!lastDate || data.date > lastDate)) lastDate = data.date;
+
+        const newDocRef = doc(newLedgerRef); // New ID
+        batch.set(newDocRef, { ...data, migratedAt: serverTimestamp() });
+        batch.delete(doc(db, 'expenses', expense.id, 'ledger', d.id)); // Delete old
+        count++;
+      });
+
+      // Update Parent Total immediately
+      batch.update(doc(db, 'users', expense.userId, 'expenses', expense.id), {
+        totalAmount: totalSum,
+        lastActivityDate: lastDate || serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+
+      await batch.commit();
+      setMessage(`Successfully migrated ${count} entries!`);
+      setLegacyCount(0);
+
+      // Refresh
+      window.location.reload();
+
+    } catch (e) {
+      console.error("Migration failed", e);
+      setMessage("Migration failed: " + e.message);
+    } finally {
+      setMigrating(false);
+    }
+  };
+
+  // 5. Running Balance Logic
+  const entriesWithBalance = React.useMemo(() => {
+    let currentTotal = displayTotal;
+    return entries.map(entry => {
+      const rowTotal = currentTotal;
+      currentTotal -= (Number(entry.amount) || 0); // Working backwards
+      return { ...entry, runningTotal: rowTotal };
+    });
+  }, [entries, displayTotal]);
+
   // Auto-format date input (20820715 -> 2082-07-15)
   const handleDateChange = (e) => {
     let value = e.target.value.replace(/[^0-9]/g, ''); // Only numbers
-    // Auto-format: after 4 digits (year) add -, after 6 digits (year-month) add -
     if (value.length >= 4) value = value.slice(0, 4) + '-' + value.slice(4);
     if (value.length >= 7) value = value.slice(0, 7) + '-' + value.slice(7);
     setDate(value);
   };
 
-  // Same for export date inputs
   const handleExportDateChange = (setter) => (e) => {
     let value = e.target.value.replace(/[^0-9]/g, '');
     if (value.length >= 4) value = value.slice(0, 4) + '-' + value.slice(4);
@@ -42,67 +260,11 @@ const ExpenseLedger = ({ expense, onBack }) => {
     setter(value);
   };
 
-  useEffect(() => {
-    if (!expense?.id) return;
-
-    const q = query(
-      collection(db, 'expenses', expense.id, 'ledger'),
-      orderBy('createdAt', 'asc')
-    );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      let chronoData = snapshot.docs.map((d) => {
-        const raw = d.data();
-        const amt = Number(raw.amount) || 0;
-        return { id: d.id, ...raw, amount: amt };
-      });
-
-      // Sort chronologically for running total calculation
-      chronoData.sort((a, b) => {
-        const da = a.date;
-        const dbDate = b.date;
-        if (da && !dbDate) return -1;
-        if (!da && dbDate) return 1;
-        if (da && dbDate) return da.localeCompare(dbDate);
-        const ca = a.createdAt?.seconds || 0;
-        const cb = b.createdAt?.seconds || 0;
-        return ca - cb;
-      });
-
-      // Calculate running totals (all expenses are positive outflows)
-      let runningTotal = 0;
-      let expenseSum = 0;
-      chronoData = chronoData.map((entry) => {
-        runningTotal += entry.amount;
-        expenseSum += entry.amount;
-        return { ...entry, runningTotal };
-      });
-
-      // Reverse for display (newest first)
-      const displayData = [...chronoData.reverse()];
-      setEntries(displayData);
-      setTotalExpenses(expenseSum);
-      setLoading(false);
-    });
-
-    return unsubscribe;
-  }, [expense]);
-
   const resetForm = () => {
     setAmount('');
     setDate('');
     setNote('');
     setEditingEntry(null);
-  };
-
-  const updateExpenseLastActivity = async (activityDate) => {
-    try {
-      await updateDoc(doc(db, 'expenses', expense.id), {
-        ...(activityDate && { lastActivityDate: activityDate }),
-        updatedAt: serverTimestamp()
-      });
-    } catch (err) {
-      console.error('Failed to update expense lastActivityDate:', err);
-    }
   };
 
   const addOrUpdateEntry = async () => {
@@ -115,27 +277,62 @@ const ExpenseLedger = ({ expense, onBack }) => {
       setMessage('Please enter date in yyyy-mm-dd format');
       return;
     }
+
+    const val = Number(amount);
+    if (isNaN(val)) return;
+
     try {
       if (editingEntry) {
-        updateDoc(
-          doc(db, 'expenses', expense.id, 'ledger', editingEntry.id),
-          { amount: Number(amount), date, note }
-        ).catch(err => console.error("Offline sync pending or failed:", err));
+        // Edit: Calculate difference
+        const oldVal = Number(editingEntry.amount);
+        const diff = val - oldVal;
 
-        updateExpenseLastActivity(date);
+        await updateDoc(
+          doc(db, 'users', expense.userId, 'expenses', expense.id, 'ledger', editingEntry.id),
+          { amount: val, date, note }
+        );
+
+        await updateDoc(doc(db, 'users', expense.userId, 'expenses', expense.id), {
+          totalAmount: increment(diff),
+          lastActivityDate: date,
+          updatedAt: serverTimestamp()
+        });
+
+        // Optimistic UI
+        setEntries(prev => prev.map(e => e.id === editingEntry.id ? { ...e, amount: val, date, note } : e));
+        if (userInteractedTotal !== null || realtimeTotal !== undefined) {
+          setUserInteractedTotal((userInteractedTotal ?? realtimeTotal) + diff);
+        }
+
         setMessage('Entry updated');
       } else {
-        addDoc(collection(db, 'expenses', expense.id, 'ledger'), {
-          amount: Number(amount),
+        // Add
+        const newRef = await addDoc(collection(db, 'users', expense.userId, 'expenses', expense.id, 'ledger'), {
+          amount: val,
           date,
           note,
           createdAt: serverTimestamp()
-        }).catch(err => console.error("Offline sync pending or failed:", err));
+        });
 
-        updateExpenseLastActivity(date);
+        await updateDoc(doc(db, 'users', expense.userId, 'expenses', expense.id), {
+          totalAmount: increment(val),
+          lastActivityDate: date,
+          updatedAt: serverTimestamp()
+        });
+
+        const newEntry = { id: newRef.id, amount: val, date, note, createdAt: { seconds: Date.now() / 1000 } };
+        setEntries(prev => [newEntry, ...prev]);
+        setTotalTransactionCount(prev => prev + 1);
+
+        if (userInteractedTotal !== null || realtimeTotal !== undefined) {
+          setUserInteractedTotal((userInteractedTotal ?? realtimeTotal) + val);
+        }
+
         setMessage('Entry added');
       }
       resetForm();
+      setTimeout(() => setUserInteractedTotal(null), 2000); // Reset optimistic after delay
+
     } catch (err) {
       console.error(err);
       setMessage('Failed to process entry');
@@ -147,37 +344,44 @@ const ExpenseLedger = ({ expense, onBack }) => {
     setAmount(entry.amount.toString());
     setDate(entry.date);
     setNote(entry.note);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleDeleteEntry = async (entryId) => {
     if (!window.confirm('Are you sure you want to delete this entry?')) return;
-    try {
-      updateDoc(doc(db, 'expenses', expense.id, 'ledger', entryId), {
-        isDeleted: true,
-        deletedAt: serverTimestamp(),
-        parentName: expense.name
-      }).catch(err => console.error("Offline sync pending or failed:", err));
 
-      if (entries.length === 1) {
-        const remainingEntries = entries.filter((e) => e.id !== entryId);
-        const mostRecentDate = remainingEntries[0]?.date || null;
-        updateExpenseLastActivity(mostRecentDate);
-      } else {
-        updateDoc(doc(db, 'expenses', expense.id), {
-          lastActivityDate: null,
-          updatedAt: serverTimestamp()
-        }).catch(err => console.error("Update failed:", err));
+    const entryToDelete = entries.find(e => e.id === entryId);
+    if (!entryToDelete) return;
+
+    const val = Number(entryToDelete.amount);
+
+    try {
+      await updateDoc(doc(db, 'users', expense.userId, 'expenses', expense.id, 'ledger', entryId), {
+        isDeleted: true,
+        deletedAt: serverTimestamp()
+      });
+
+      await updateDoc(doc(db, 'users', expense.userId, 'expenses', expense.id), {
+        totalAmount: increment(-val),
+        updatedAt: serverTimestamp() // Note: lastActivityDate might be tricky to revert perfectly, leaving as is or current
+      });
+
+      setEntries(prev => prev.filter(e => e.id !== entryId));
+      setTotalTransactionCount(prev => prev - 1);
+
+      if (userInteractedTotal !== null || realtimeTotal !== undefined) {
+        setUserInteractedTotal((userInteractedTotal ?? realtimeTotal) - val);
       }
+
       setMessage('Entry deleted');
+      setTimeout(() => setUserInteractedTotal(null), 2000);
     } catch (err) {
       console.error(err);
       setMessage('Failed to delete entry');
     }
   };
 
-  const formatAmount = (num) => {
-    return new Intl.NumberFormat('en-IN').format(num);
-  };
+
 
   // EXPORT FUNCTIONALITY
   const handleExportPDF = async () => {
@@ -246,7 +450,7 @@ const ExpenseLedger = ({ expense, onBack }) => {
     }
   };
 
-  if (!expense) return null;
+  if (!expense || !expense.id) return <div style={{ padding: '20px', textAlign: 'center' }}>No Expense Data Found (Missing ID: {expense ? 'Yes' : 'No'}). Please go back.</div>;
 
   return (
     <div style={{
@@ -311,8 +515,18 @@ const ExpenseLedger = ({ expense, onBack }) => {
               color: '#546e7a'
             }}>
               Total Spent: <span style={{ fontSize: isMobile ? '20px' : '22px', fontWeight: '800', color: '#c62828' }}>
-                Rs. {formatAmount(totalExpenses)}
+                Rs. {formatAmount(displayTotal)}
               </span>
+              <button
+                onClick={(e) => { e.stopPropagation(); recalculateTotals(true); }}
+                style={{
+                  marginLeft: '8px', border: 'none', background: 'transparent', cursor: 'pointer',
+                  color: '#c62828', fontSize: '16px', padding: '0 4px'
+                }}
+                title="Recalculate Totals"
+              >
+                🔄
+              </button>
             </p>
           </div>
         </div>
@@ -536,12 +750,28 @@ const ExpenseLedger = ({ expense, onBack }) => {
         {/* Ledger Table */}
         {loading ? (
           <p style={{ textAlign: 'center', color: '#78909c', fontSize: '16px', padding: '60px' }}>
-            Loading ledger key data...
+            Loading Expense Ledger (User: {expense?.userId || 'N/A'})...
           </p>
         ) : entries.length === 0 ? (
-          <p style={{ color: '#78909c', textAlign: 'center', padding: '60px', fontSize: '14px', background: '#f9fafb', borderRadius: '12px' }}>
-            No expense entries yet. Add your first expense above.
-          </p>
+          <div style={{ color: '#78909c', textAlign: 'center', padding: '60px', fontSize: '14px', background: '#f9fafb', borderRadius: '12px' }}>
+            <p>No expense entries yet. Add your first expense above.</p>
+            {legacyCount > 0 && (
+              <div style={{ marginTop: '20px', padding: '16px', background: '#fff3e0', borderRadius: '12px', border: '1px solid #ffe0b2' }}>
+                <p style={{ color: '#e65100', fontWeight: '600', marginBottom: '8px' }}>
+                  ⚠️ Found {legacyCount} entries from previous version.
+                </p>
+                <button
+                  onClick={migrateLegacyData}
+                  disabled={migrating}
+                  style={{
+                    padding: '8px 16px', borderRadius: '8px', border: 'none', background: '#e65100', color: 'white', fontWeight: 'bold', cursor: 'pointer'
+                  }}
+                >
+                  {migrating ? 'Migrating...' : 'Migrate Data Now'}
+                </button>
+              </div>
+            )}
+          </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{
@@ -573,7 +803,7 @@ const ExpenseLedger = ({ expense, onBack }) => {
                 </tr>
               </thead>
               <tbody>
-                {entries.map((entry, index) => (
+                {entriesWithBalance.map((entry, index) => (
                   <tr
                     key={entry.id}
                     style={{
@@ -631,6 +861,22 @@ const ExpenseLedger = ({ expense, onBack }) => {
                 ))}
               </tbody>
             </table>
+
+            {entries.length < totalTransactionCount && (
+              <div style={{ textAlign: 'center', marginTop: '20px' }}>
+                <button
+                  onClick={fetchMoreEntries}
+                  disabled={loadingMore}
+                  style={{
+                    padding: '12px 30px', borderRadius: '25px', border: 'none', background: '#ffebee', color: '#c62828',
+                    fontSize: '14px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                  }}
+                >
+                  {loadingMore ? 'Loading...' : 'Load More'}
+                </button>
+              </div>
+            )}
+
           </div>
         )}
       </div>

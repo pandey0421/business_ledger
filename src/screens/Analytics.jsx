@@ -140,7 +140,22 @@ const Analytics = ({ goBack }) => {
             ]);
 
             // Deep Fetch Ledgers
-            const fetchLedger = async (coll, id) => (await getDocs(collection(db, coll, id, 'ledger'))).docs.map(d => ({ ...d.data(), entityId: id }));
+            const fetchLedger = async (coll, id) => {
+                // Try User Scope first
+                let ref = collection(db, 'users', userId, coll, id, 'ledger');
+                let snapshot = await getDocs(ref);
+
+                // Fallback to Root Scope if empty (Legacy support)
+                if (snapshot.empty) {
+                    const rootRef = collection(db, coll, id, 'ledger');
+                    const rootSnap = await getDocs(rootRef);
+                    if (!rootSnap.empty) {
+                        snapshot = rootSnap;
+                    }
+                }
+                return snapshot.docs.map(d => ({ ...d.data(), entityId: id }));
+            };
+
             const custLedgers = (await Promise.all(customers.map(c => fetchLedger('customers', c.id)))).flat();
             const suppLedgers = (await Promise.all(suppliers.map(s => fetchLedger('suppliers', s.id)))).flat();
             const expLedgers = (await Promise.all(expenses.map(e => fetchLedger('expenses', e.id)))).flat();

@@ -16,6 +16,7 @@ import Subscription from "./screens/Subscription";
 import Landing from "./screens/Landing";
 import Analytics from "./screens/Analytics";
 import RecycleBin from "./screens/RecycleBin";
+import DataMigration from "./screens/DataMigration";
 
 import Footer from "./components/Footer";
 import Spinner from "./components/Spinner";
@@ -29,9 +30,10 @@ function App() {
 
   // Initialize screen strictly from hash
   const getScreenFromHash = () => {
-    const hash = window.location.hash.slice(1); // Remove #
+    let hash = window.location.hash.slice(1); // Remove #
+    if (hash.startsWith('/')) hash = hash.slice(1); // Remove leading / if present
     const [route] = hash.split('/');
-    const VALID_SCREENS = ["dashboard", "customers", "suppliers", "expenses", "analytics", "privacy", "terms", "recyclebin"];
+    const VALID_SCREENS = ["dashboard", "customers", "suppliers", "expenses", "analytics", "privacy", "terms", "recyclebin", "migration"];
     return VALID_SCREENS.includes(route) ? route : "dashboard";
   };
 
@@ -60,7 +62,10 @@ function App() {
 
     // 2. Sync URL when Internal State Changes
     // Only update hash if it's different to prevent loops/overwrite on load
-    const currentHashRoute = window.location.hash.slice(1).split('/')[0];
+    let currentRaw = window.location.hash.slice(1);
+    if (currentRaw.startsWith('/')) currentRaw = currentRaw.slice(1);
+    const currentHashRoute = currentRaw.split('/')[0];
+
     if (screen !== 'dashboard' && screen !== currentHashRoute) {
       window.location.hash = screen;
     } else if (screen === 'dashboard' && currentHashRoute !== '' && currentHashRoute !== 'dashboard') {
@@ -232,6 +237,8 @@ function App() {
         return <Analytics goBack={() => setScreen("dashboard")} />;
       case "recyclebin":
         return <RecycleBin goBack={() => setScreen("dashboard")} />;
+      case "migration":
+        return <DataMigration goBack={() => setScreen("dashboard")} />;
       case "privacy":
         return <Privacy goBack={() => setScreen("dashboard")} />;
       case "terms":
