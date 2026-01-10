@@ -4,8 +4,11 @@ import { db } from '../firebase';
 import { exportLedgerToPDF, formatIndianCurrency } from '../utils/pdfExport';
 import LedgerPDFTemplate from '../components/LedgerPDFTemplate';
 
+import { useBadDebt } from '../utils/badDebtCalculator';
+
 const CustomerLedger = ({ customer, onBack }) => {
   const [entries, setEntries] = useState([]);
+
   const [amount, setAmount] = useState('');
   const [type, setType] = useState('sale');
   const [date, setDate] = useState('');
@@ -19,6 +22,11 @@ const CustomerLedger = ({ customer, onBack }) => {
   const [exportEnd, setExportEnd] = useState('');
   const [exportLoading, setExportLoading] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+
+  // useBadDebt Hook
+  const { hasBadDebt, badDebtAmount, oldestUnpaidDate } = useBadDebt(entries);
+
+
 
   // Mobile responsive detection
   useEffect(() => {
@@ -55,7 +63,7 @@ const CustomerLedger = ({ customer, onBack }) => {
         const raw = d.data();
         const amt = Number(raw.amount) || 0;
         return { id: d.id, ...raw, amount: amt };
-      });
+      }).filter(d => !d.isDeleted);
 
       chronoData.sort((a, b) => {
         const da = a.date;
@@ -124,27 +132,29 @@ const CustomerLedger = ({ customer, onBack }) => {
     }
     try {
       if (editingEntry) {
-        await updateDoc(
+        updateDoc(
           doc(db, 'customers', customer.id, 'ledger', editingEntry.id),
           { amount: Number(amount), type, date, note }
-        );
-        await updateCustomerLastActivity(date);
-        setMessage('Entry updated successfully');
+        ).catch(err => console.error("Offline sync pending or failed:", err));
+
+        updateCustomerLastActivity(date);
+        setMessage('Entry updated');
       } else {
-        await addDoc(collection(db, 'customers', customer.id, 'ledger'), {
+        addDoc(collection(db, 'customers', customer.id, 'ledger'), {
           amount: Number(amount),
           type,
           date,
           note,
           createdAt: serverTimestamp()
-        });
-        await updateCustomerLastActivity(date);
-        setMessage('Entry added successfully');
+        }).catch(err => console.error("Offline sync pending or failed:", err));
+
+        updateCustomerLastActivity(date);
+        setMessage('Entry added');
       }
       resetForm();
     } catch (err) {
       console.error(err);
-      setMessage('Failed to add/update entry');
+      setMessage('Failed to process entry');
     }
   };
 
@@ -159,18 +169,23 @@ const CustomerLedger = ({ customer, onBack }) => {
   const handleDeleteEntry = async (entryId) => {
     if (!window.confirm('Are you sure you want to delete this entry?')) return;
     try {
-      await deleteDoc(doc(db, 'customers', customer.id, 'ledger', entryId));
+      updateDoc(doc(db, 'customers', customer.id, 'ledger', entryId), {
+        isDeleted: true,
+        deletedAt: serverTimestamp(),
+        parentName: customer.name // Helpers for Recycle Bin display
+      }).catch(err => console.error("Offline sync pending or failed:", err));
+
       if (entries.length === 1) {
         const remainingEntries = entries.filter((e) => e.id !== entryId);
         const mostRecentDate = remainingEntries[0]?.date || null;
-        await updateCustomerLastActivity(mostRecentDate);
+        updateCustomerLastActivity(mostRecentDate);
       } else {
-        await updateDoc(doc(db, 'customers', customer.id), {
+        updateDoc(doc(db, 'customers', customer.id), {
           lastActivityDate: null,
           updatedAt: serverTimestamp()
-        });
+        }).catch(err => console.error("Update failed:", err));
       }
-      setMessage('Entry deleted successfully');
+      setMessage('Entry deleted');
     } catch (err) {
       console.error(err);
       setMessage('Failed to delete entry');
@@ -310,6 +325,37 @@ const CustomerLedger = ({ customer, onBack }) => {
             </h2>
           </div>
         </div>
+
+        {/* BAD DEBT ALERT */}
+        {hasBadDebt && (
+          <div style={{
+            marginBottom: isMobile ? '20px' : '32px',
+            padding: '16px',
+            backgroundColor: '#ffebee',
+            color: '#b71c1c',
+            borderRadius: '16px',
+            border: '1px solid #ef5350',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px',
+            boxShadow: '0 4px 12px rgba(239, 83, 80, 0.15)'
+          }}>
+            <div style={{
+              width: '40px', height: '40px', borderRadius: '50%', background: '#ffcdd2',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              fontSize: '20px'
+            }}>
+              ⚠️
+            </div>
+            <div>
+              <h4 style={{ margin: '0 0 4px 0', fontSize: '16px', fontWeight: '800' }}>Bad Debt Alert</h4>
+              <p style={{ margin: 0, fontSize: '14px', lineHeight: '1.5' }}>
+                Total Old Debt: <strong style={{ textDecoration: 'underline' }}>Rs. {formatAmount(badDebtAmount)}</strong>.
+                Oldest unpaid sale date: <strong>{oldestUnpaidDate}</strong> (&gt; 6 months).
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* NEW TOTALS CARD DESIGN - Updated for Aesthetics */}
         <div style={{

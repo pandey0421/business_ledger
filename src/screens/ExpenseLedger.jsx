@@ -117,26 +117,28 @@ const ExpenseLedger = ({ expense, onBack }) => {
     }
     try {
       if (editingEntry) {
-        await updateDoc(
+        updateDoc(
           doc(db, 'expenses', expense.id, 'ledger', editingEntry.id),
           { amount: Number(amount), date, note }
-        );
-        await updateExpenseLastActivity(date);
-        setMessage('Entry updated successfully');
+        ).catch(err => console.error("Offline sync pending or failed:", err));
+
+        updateExpenseLastActivity(date);
+        setMessage('Entry updated');
       } else {
-        await addDoc(collection(db, 'expenses', expense.id, 'ledger'), {
+        addDoc(collection(db, 'expenses', expense.id, 'ledger'), {
           amount: Number(amount),
           date,
           note,
           createdAt: serverTimestamp()
-        });
-        await updateExpenseLastActivity(date);
-        setMessage('Entry added successfully');
+        }).catch(err => console.error("Offline sync pending or failed:", err));
+
+        updateExpenseLastActivity(date);
+        setMessage('Entry added');
       }
       resetForm();
     } catch (err) {
       console.error(err);
-      setMessage('Failed to add/update entry');
+      setMessage('Failed to process entry');
     }
   };
 
@@ -150,18 +152,23 @@ const ExpenseLedger = ({ expense, onBack }) => {
   const handleDeleteEntry = async (entryId) => {
     if (!window.confirm('Are you sure you want to delete this entry?')) return;
     try {
-      await deleteDoc(doc(db, 'expenses', expense.id, 'ledger', entryId));
+      updateDoc(doc(db, 'expenses', expense.id, 'ledger', entryId), {
+        isDeleted: true,
+        deletedAt: serverTimestamp(),
+        parentName: expense.name
+      }).catch(err => console.error("Offline sync pending or failed:", err));
+
       if (entries.length === 1) {
         const remainingEntries = entries.filter((e) => e.id !== entryId);
         const mostRecentDate = remainingEntries[0]?.date || null;
-        await updateExpenseLastActivity(mostRecentDate);
+        updateExpenseLastActivity(mostRecentDate);
       } else {
-        await updateDoc(doc(db, 'expenses', expense.id), {
+        updateDoc(doc(db, 'expenses', expense.id), {
           lastActivityDate: null,
           updatedAt: serverTimestamp()
-        });
+        }).catch(err => console.error("Update failed:", err));
       }
-      setMessage('Entry deleted successfully');
+      setMessage('Entry deleted');
     } catch (err) {
       console.error(err);
       setMessage('Failed to delete entry');

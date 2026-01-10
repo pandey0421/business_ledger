@@ -59,7 +59,7 @@ const SupplierLedger = ({ supplier, onBack }) => {
           ...raw,
           amount: amt
         };
-      });
+      }).filter(d => !d.isDeleted);
 
       chronoData.sort((a, b) => {
         const da = a.date;
@@ -129,27 +129,29 @@ const SupplierLedger = ({ supplier, onBack }) => {
 
     try {
       if (editingEntry) {
-        await updateDoc(
+        updateDoc(
           doc(db, 'suppliers', supplier.id, 'ledger', editingEntry.id),
           { amount: Number(amount), type, date, note }
-        );
-        await updateSupplierLastActivity(date);
-        setMessage('Entry updated successfully');
+        ).catch(err => console.error("Offline sync pending or failed:", err));
+
+        updateSupplierLastActivity(date);
+        setMessage('Entry updated');
       } else {
-        await addDoc(collection(db, 'suppliers', supplier.id, 'ledger'), {
+        addDoc(collection(db, 'suppliers', supplier.id, 'ledger'), {
           amount: Number(amount),
           type,
           date,
           note,
           createdAt: serverTimestamp()
-        });
-        await updateSupplierLastActivity(date);
-        setMessage('Entry added successfully');
+        }).catch(err => console.error("Offline sync pending or failed:", err));
+
+        updateSupplierLastActivity(date);
+        setMessage('Entry added');
       }
       resetForm();
     } catch (err) {
       console.error(err);
-      setMessage('Failed to add/update entry');
+      setMessage('Failed to process entry');
     }
   };
 
@@ -165,18 +167,23 @@ const SupplierLedger = ({ supplier, onBack }) => {
     if (!window.confirm('Are you sure you want to delete this entry?')) return;
 
     try {
-      await deleteDoc(doc(db, 'suppliers', supplier.id, 'ledger', entryId));
+      updateDoc(doc(db, 'suppliers', supplier.id, 'ledger', entryId), {
+        isDeleted: true,
+        deletedAt: serverTimestamp(),
+        parentName: supplier.name
+      }).catch(err => console.error("Offline sync pending or failed:", err));
+
       if (entries.length === 1) {
         const remainingEntries = entries.filter((e) => e.id !== entryId);
         const mostRecentDate = remainingEntries[0]?.date || null;
-        await updateSupplierLastActivity(mostRecentDate);
+        updateSupplierLastActivity(mostRecentDate);
       } else {
-        await updateDoc(doc(db, 'suppliers', supplier.id), {
+        updateDoc(doc(db, 'suppliers', supplier.id), {
           lastActivityDate: null,
           updatedAt: serverTimestamp()
-        });
+        }).catch(err => console.error("Update failed:", err));
       }
-      setMessage('Entry deleted successfully');
+      setMessage('Entry deleted');
     } catch (err) {
       console.error(err);
       setMessage('Failed to delete entry');

@@ -34,7 +34,8 @@ function Customers({ goBack }) {
     if (!customerRef) return;
     try {
       const snapshot = await getDocs(customerRef);
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), userId }));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), userId }))
+        .filter(d => !d.isDeleted);
       setCustomers(data);
     } catch (err) {
       console.error(err);
@@ -50,7 +51,8 @@ function Customers({ goBack }) {
     setLoadingStats(true);
     try {
       const snapshot = await getDocs(customerRef);
-      const customersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const customersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(d => !d.isDeleted);
 
       const results = await Promise.all(customersData.map(async (customer) => {
         const ledgerRef = collection(db, 'customers', customer.id, 'ledger');
@@ -169,20 +171,13 @@ function Customers({ goBack }) {
   };
 
   const handleDeleteCustomer = async (customerId) => {
-    if (!window.confirm('Are you sure you want to delete this customer and all their ledger entries?')) return;
+    if (!window.confirm('Are you sure you want to move this customer to the Recycle Bin?')) return;
     try {
-      const userLedgerRef = collection(db, 'users', userId, 'customers', customerId, 'ledger');
-      const globalLedgerRef = collection(db, 'customers', customerId, 'ledger');
-      const userLedgerSnapshot = await getDocs(userLedgerRef);
-      for (const ledgerDoc of userLedgerSnapshot.docs) {
-        await deleteDoc(doc(db, 'users', userId, 'customers', customerId, 'ledger', ledgerDoc.id));
-      }
-      const globalLedgerSnapshot = await getDocs(globalLedgerRef);
-      for (const ledgerDoc of globalLedgerSnapshot.docs) {
-        await deleteDoc(doc(db, 'customers', customerId, 'ledger', ledgerDoc.id));
-      }
-      await deleteDoc(doc(db, 'users', userId, 'customers', customerId));
-      setMessage('Customer deleted successfully');
+      await updateDoc(doc(db, 'users', userId, 'customers', customerId), {
+        isDeleted: true,
+        deletedAt: serverTimestamp()
+      });
+      setMessage('Customer moved to Recycle Bin');
       fetchCustomers();
     } catch (err) {
       console.error(err);

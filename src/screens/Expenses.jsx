@@ -28,7 +28,8 @@ function Expenses({ goBack }) {
     if (!expenseRef) return;
     try {
       const snapshot = await getDocs(expenseRef);
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), userId }));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), userId }))
+        .filter(d => !d.isDeleted);
       setExpenses(data);
     } catch (err) {
       console.error(err);
@@ -44,7 +45,8 @@ function Expenses({ goBack }) {
     setLoadingStats(true);
     try {
       const snapshot = await getDocs(expenseRef);
-      const expensesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const expensesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(d => !d.isDeleted);
 
 
       const results = await Promise.all(expensesData.map(async (expense) => {
@@ -123,25 +125,13 @@ function Expenses({ goBack }) {
   };
 
   const handleDeleteExpense = async (expenseId) => {
-    if (!window.confirm('Are you sure you want to delete this expense category and all its entries?')) return;
+    if (!window.confirm('Are you sure you want to move this expense category to the Recycle Bin?')) return;
     try {
-      // Delete from both user-specific and global ledger paths
-      const userLedgerRef = collection(db, 'users', userId, 'expenses', expenseId, 'ledger');
-      const globalLedgerRef = collection(db, 'expenses', expenseId, 'ledger');
-
-      const userLedgerSnapshot = await getDocs(userLedgerRef);
-      for (const ledgerDoc of userLedgerSnapshot.docs) {
-        await deleteDoc(doc(db, 'users', userId, 'expenses', expenseId, 'ledger', ledgerDoc.id));
-      }
-
-      const globalLedgerSnapshot = await getDocs(globalLedgerRef);
-      for (const ledgerDoc of globalLedgerSnapshot.docs) {
-        await deleteDoc(doc(db, 'expenses', expenseId, 'ledger', ledgerDoc.id));
-      }
-
-      // Delete expense category
-      await deleteDoc(doc(db, 'users', userId, 'expenses', expenseId));
-      setMessage('Expense category deleted successfully');
+      await updateDoc(doc(db, 'users', userId, 'expenses', expenseId), {
+        isDeleted: true,
+        deletedAt: serverTimestamp()
+      });
+      setMessage('Expense category moved to Recycle Bin');
       fetchExpenses();
     } catch (err) {
       console.error(err);

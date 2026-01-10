@@ -29,7 +29,8 @@ function Suppliers({ goBack }) {
     if (!supplierRef) return;
     try {
       const snapshot = await getDocs(supplierRef);
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), userId }));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), userId }))
+        .filter(d => !d.isDeleted);
       setSuppliers(data);
     } catch (err) {
       console.error(err);
@@ -45,7 +46,8 @@ function Suppliers({ goBack }) {
     setLoadingStats(true);
     try {
       const snapshot = await getDocs(supplierRef);
-      const suppliersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const suppliersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(d => !d.isDeleted);
 
 
       const results = await Promise.all(suppliersData.map(async (supplier) => {
@@ -164,25 +166,13 @@ function Suppliers({ goBack }) {
   };
 
   const handleDeleteSupplier = async (supplierId) => {
-    if (!window.confirm('Are you sure you want to delete this supplier and all their ledger entries?')) return;
+    if (!window.confirm('Are you sure you want to move this supplier to the Recycle Bin?')) return;
     try {
-      // Delete from both locations to be safe
-      const userLedgerRef = collection(db, 'users', userId, 'suppliers', supplierId, 'ledger');
-      const globalLedgerRef = collection(db, 'suppliers', supplierId, 'ledger');
-
-      const userLedgerSnapshot = await getDocs(userLedgerRef);
-      for (const ledgerDoc of userLedgerSnapshot.docs) {
-        await deleteDoc(doc(db, 'users', userId, 'suppliers', supplierId, 'ledger', ledgerDoc.id));
-      }
-
-      const globalLedgerSnapshot = await getDocs(globalLedgerRef);
-      for (const ledgerDoc of globalLedgerSnapshot.docs) {
-        await deleteDoc(doc(db, 'suppliers', supplierId, 'ledger', ledgerDoc.id));
-      }
-
-      // Delete supplier
-      await deleteDoc(doc(db, 'users', userId, 'suppliers', supplierId));
-      setMessage('Supplier deleted successfully');
+      await updateDoc(doc(db, 'users', userId, 'suppliers', supplierId), {
+        isDeleted: true,
+        deletedAt: serverTimestamp()
+      });
+      setMessage('Supplier moved to Recycle Bin');
       fetchSuppliers();
     } catch (err) {
       console.error(err);

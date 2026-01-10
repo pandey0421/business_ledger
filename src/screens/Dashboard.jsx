@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, Users, ShoppingBag, CreditCard, LogOut, Grid, BarChart2 } from 'lucide-react';
+import { Menu, X, Users, ShoppingBag, CreditCard, LogOut, Grid, BarChart2, Trash2 } from 'lucide-react';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
 
@@ -311,6 +311,37 @@ const Dashboard = ({ user, onSelect }) => {
               fontWeight: '600', cursor: 'pointer'
             }}>
               Track Expenses
+            </button>
+          </div>
+
+          {/* Recycle Bin Card */}
+          <div
+            style={cardStyle}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-5px)';
+              e.currentTarget.style.boxShadow = '0 12px 30px rgba(0,0,0,0.1)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.05)';
+            }}
+            onClick={() => updateScreenAndHash('recyclebin', 'RecycleBin')}
+          >
+            <div style={{
+              width: '64px', height: '64px', borderRadius: '50%',
+              background: '#f3e5f5', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', marginBottom: '16px'
+            }}>
+              <Trash2 size={32} color="#7b1fa2" />
+            </div>
+            <h3 style={{ margin: '0 0 8px 0', color: '#1a237e', fontSize: '18px' }}>Recycle Bin</h3>
+            <p style={{ margin: 0, color: '#546e7a', fontSize: '14px' }}>Restore deleted items</p>
+            <button style={{
+              marginTop: '16px', padding: '8px 24px', borderRadius: '20px',
+              background: '#7b1fa2', color: 'white', border: 'none',
+              fontWeight: '600', cursor: 'pointer'
+            }}>
+              View Bin
             </button>
           </div>
         </div>

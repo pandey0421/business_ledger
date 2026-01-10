@@ -15,6 +15,7 @@ import Terms from "./screens/Terms";
 import Subscription from "./screens/Subscription";
 import Landing from "./screens/Landing";
 import Analytics from "./screens/Analytics";
+import RecycleBin from "./screens/RecycleBin";
 
 import Footer from "./components/Footer";
 import Spinner from "./components/Spinner";
@@ -30,7 +31,7 @@ function App() {
   const getScreenFromHash = () => {
     const hash = window.location.hash.slice(1); // Remove #
     const [route] = hash.split('/');
-    const VALID_SCREENS = ["dashboard", "customers", "suppliers", "expenses", "analytics", "privacy", "terms"];
+    const VALID_SCREENS = ["dashboard", "customers", "suppliers", "expenses", "analytics", "privacy", "terms", "recyclebin"];
     return VALID_SCREENS.includes(route) ? route : "dashboard";
   };
 
@@ -229,6 +230,8 @@ function App() {
         return <Expenses goBack={() => setScreen("dashboard")} />;
       case "analytics":
         return <Analytics goBack={() => setScreen("dashboard")} />;
+      case "recyclebin":
+        return <RecycleBin goBack={() => setScreen("dashboard")} />;
       case "privacy":
         return <Privacy goBack={() => setScreen("dashboard")} />;
       case "terms":
