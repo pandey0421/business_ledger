@@ -17,6 +17,7 @@ import Landing from "./screens/Landing";
 import Analytics from "./screens/Analytics";
 import RecycleBin from "./screens/RecycleBin";
 import DataMigration from "./screens/DataMigration";
+import BackupRestore from "./screens/BackupRestore";
 
 import Footer from "./components/Footer";
 import Spinner from "./components/Spinner";
@@ -33,7 +34,7 @@ function App() {
     let hash = window.location.hash.slice(1); // Remove #
     if (hash.startsWith('/')) hash = hash.slice(1); // Remove leading / if present
     const [route] = hash.split('/');
-    const VALID_SCREENS = ["dashboard", "customers", "suppliers", "expenses", "analytics", "privacy", "terms", "recyclebin", "migration"];
+    const VALID_SCREENS = ["dashboard", "customers", "suppliers", "expenses", "analytics", "privacy", "terms", "recyclebin", "migration", "backup"];
     return VALID_SCREENS.includes(route) ? route : "dashboard";
   };
 
@@ -239,6 +240,8 @@ function App() {
         return <RecycleBin goBack={() => setScreen("dashboard")} />;
       case "migration":
         return <DataMigration goBack={() => setScreen("dashboard")} />;
+      case "backup":
+        return <BackupRestore goBack={() => setScreen("dashboard")} />;
       case "privacy":
         return <Privacy goBack={() => setScreen("dashboard")} />;
       case "terms":

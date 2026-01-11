@@ -3,12 +3,13 @@ import { getAuth } from "firebase/auth";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyA_Mzkp11J0wixptA896OY6JykHyVn20OE",
-  authDomain: "father-business.firebaseapp.com",
-  projectId: "father-business",
-  storageBucket: "father-business.firebasestorage.app",
-  messagingSenderId: "169138412744",
-  appId: "1:169138412744:web:1a3ad329a7d5098fc899fd"
+  apiKey: "AIzaSyCtdxrY390NK-JVbfe_y9yeS-OXSZyaRWo",
+  authDomain: "karobaar-khata-prod.firebaseapp.com",
+  projectId: "karobaar-khata-prod",
+  storageBucket: "karobaar-khata-prod.firebasestorage.app",
+  messagingSenderId: "755986166350",
+  appId: "1:755986166350:web:2bd358ee704b23b1fb491f",
+  measurementId: "G-PMSYXXQ9BX"
 };
 
 const app = initializeApp(firebaseConfig);
