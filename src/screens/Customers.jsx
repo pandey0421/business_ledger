@@ -31,52 +31,54 @@ function Customers({ goBack }) {
   const customerRef = userId ? collection(db, 'users', userId, 'customers') : null;
 
   const fetchCustomers = async () => {
-    if (!customerRef) return;
-    try {
-      const snapshot = await getDocs(customerRef);
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), userId }))
-        .filter(d => !d.isDeleted);
-      setCustomers(data);
-    } catch (err) {
-      console.error(err);
-      setMessage('Failed to load customers');
-    }
-  };
-
-  const fetchOverallStats = async () => {
-    if (!customerRef || !userId) {
-      setLoadingStats(false);
-      return;
-    }
+    if (!customerRef || !userId) return;
     setLoadingStats(true);
     try {
       const snapshot = await getDocs(customerRef);
-      const customersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter(d => !d.isDeleted);
 
-      const results = await Promise.all(customersData.map(async (customer) => {
-        const ledgerRef = collection(db, 'customers', customer.id, 'ledger');
-        const ledgerSnapshot = await getDocs(ledgerRef);
-        let customerSales = 0;
-        let customerPayments = 0;
-        ledgerSnapshot.docs.forEach(ledgerDoc => {
-          const data = ledgerDoc.data();
-          if (data.type === 'sale') customerSales += Number(data.amount) || 0;
-          if (data.type === 'payment') customerPayments += Number(data.amount) || 0;
+      const enrichedCustomers = await Promise.all(snapshot.docs.map(async (docSnap) => {
+        const cData = { id: docSnap.id, ...docSnap.data(), userId };
+        if (cData.isDeleted) return null;
+
+        // Correct Path: users/{uid}/customers/{id}/ledger
+        const ledgerRef = collection(db, 'users', userId, 'customers', docSnap.id, 'ledger');
+        const ledgerSnap = await getDocs(ledgerRef);
+
+        let sales = 0;
+        let received = 0;
+        ledgerSnap.docs.forEach(l => {
+          const d = l.data();
+          if (!d.isDeleted) {
+            if (d.type === 'sale') sales += Number(d.amount) || 0;
+            if (d.type === 'payment') received += Number(d.amount) || 0;
+          }
         });
-        return { sales: customerSales, payments: customerPayments };
+
+        return {
+          ...cData,
+          totalSales: sales,
+          totalReceived: received,
+          totalBalance: sales - received
+        };
       }));
 
-      const totalSales = results.reduce((acc, curr) => acc + curr.sales, 0);
-      const totalPayments = results.reduce((acc, curr) => acc + curr.payments, 0);
+      const finalCustomers = enrichedCustomers.filter(c => c !== null);
+      setCustomers(finalCustomers);
+
+      // Calculate Overall Stats directly
+      const totalSales = finalCustomers.reduce((sum, c) => sum + (c.totalSales || 0), 0);
+      const totalPayments = finalCustomers.reduce((sum, c) => sum + (c.totalReceived || 0), 0);
+
       setOverallStats({
-        totalSales: Math.max(0, totalSales),
-        totalPayments: Math.max(0, totalPayments),
-        totalBalance: Math.max(0, totalSales - totalPayments),
-        totalCustomers: customersData.length
+        totalSales,
+        totalPayments,
+        totalBalance: totalSales - totalPayments,
+        totalCustomers: finalCustomers.length
       });
+
     } catch (err) {
-      console.error('Failed to fetch overall stats:', err);
+      console.error(err);
+      setMessage('Failed to load customers');
     } finally {
       setLoadingStats(false);
     }
@@ -116,12 +118,7 @@ function Customers({ goBack }) {
 
   useEffect(() => {
     fetchCustomers();
-    fetchOverallStats();
   }, [userId]);
-
-  useEffect(() => {
-    if (customers.length > 0) fetchOverallStats();
-  }, [customers]);
 
   const handleAddCustomer = async () => {
     if (!name.trim()) {
@@ -549,6 +546,20 @@ function Customers({ goBack }) {
                     No phone number
                   </div>
                 )}
+
+                {/* Ledger Details on Card - Added Requested Feature */}
+                <div style={{ marginBottom: '16px', paddingTop: '16px', borderTop: '1px dashed #f0f0f0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '12px', color: '#546e7a' }}>Balance</span>
+                    <span style={{ fontSize: '14px', fontWeight: 'bold', color: (c.totalBalance || 0) >= 0 ? '#1a237e' : '#c62828' }}>
+                      Rs. {formatAmount(c.totalBalance || 0)}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#90a4ae' }}>
+                    <span>Sales: {formatAmount(c.totalSales || 0)}</span>
+                    <span>Paid: {formatAmount(c.totalReceived || 0)}</span>
+                  </div>
+                </div>
 
                 <div style={{
                   display: 'flex',

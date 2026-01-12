@@ -18,6 +18,7 @@ import Analytics from "./screens/Analytics";
 import RecycleBin from "./screens/RecycleBin";
 import DataMigration from "./screens/DataMigration";
 import BackupRestore from "./screens/BackupRestore";
+import Inventory from "./screens/Inventory";
 
 import Footer from "./components/Footer";
 import Spinner from "./components/Spinner";
@@ -34,7 +35,7 @@ function App() {
     let hash = window.location.hash.slice(1); // Remove #
     if (hash.startsWith('/')) hash = hash.slice(1); // Remove leading / if present
     const [route] = hash.split('/');
-    const VALID_SCREENS = ["dashboard", "customers", "suppliers", "expenses", "analytics", "privacy", "terms", "recyclebin", "migration", "backup"];
+    const VALID_SCREENS = ["dashboard", "customers", "suppliers", "expenses", "analytics", "privacy", "terms", "recyclebin", "migration", "backup", "inventory"];
     return VALID_SCREENS.includes(route) ? route : "dashboard";
   };
 
@@ -235,7 +236,7 @@ function App() {
       case "expenses":
         return <Expenses goBack={() => setScreen("dashboard")} />;
       case "analytics":
-        return <Analytics goBack={() => setScreen("dashboard")} />;
+        return <Analytics user={user} goBack={() => setScreen("dashboard")} />;
       case "recyclebin":
         return <RecycleBin goBack={() => setScreen("dashboard")} />;
       case "migration":
@@ -246,6 +247,8 @@ function App() {
         return <Privacy goBack={() => setScreen("dashboard")} />;
       case "terms":
         return <Terms goBack={() => setScreen("dashboard")} />;
+      case "inventory":
+        return <Inventory user={user} goBack={() => setScreen("dashboard")} />;
       default:
         return <Dashboard user={user} onSelect={(s) => setScreen(s)} />;
     }

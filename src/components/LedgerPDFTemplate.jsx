@@ -54,19 +54,19 @@ const LedgerPDFTemplate = ({
     >
       {/* HEADER */}
       <div style={{ textAlign: 'center', marginBottom: '25px', borderBottom: '3px solid #1e88e5', paddingBottom: '15px' }}>
-        <h1 style={{ 
-          fontSize: '24px', 
-          fontWeight: 'bold', 
-          color: '#1a237e', 
+        <h1 style={{
+          fontSize: '24px',
+          fontWeight: 'bold',
+          color: '#1a237e',
           margin: '0 0 8px 0',
           textTransform: 'uppercase'
         }}>
           LEDGER REPORT
         </h1>
-        <h2 style={{ 
-          fontSize: '18px', 
-          fontWeight: '600', 
-          color: '#1976d2', 
+        <h2 style={{
+          fontSize: '18px',
+          fontWeight: '600',
+          color: '#1976d2',
           margin: '0 0 5px 0'
         }}>
           {entityType.toUpperCase()} LEDGER
@@ -91,9 +91,9 @@ const LedgerPDFTemplate = ({
         <div style={{ fontSize: '14px', fontWeight: '600', color: '#1565c0', marginBottom: '5px' }}>
           OPENING BALANCE (as of {formatDate(dateRange.from)})
         </div>
-        <div style={{ 
-          fontSize: '22px', 
-          fontWeight: 'bold', 
+        <div style={{
+          fontSize: '22px',
+          fontWeight: 'bold',
           color: openingBalance >= 0 ? '#2e7d32' : '#d32f2f',
           margin: '0'
         }}>
@@ -172,8 +172,8 @@ const LedgerPDFTemplate = ({
                 <td style={{ border: '1px solid #e0e0e0', padding: '8px' }}>
                   {formatDate(entry.date)}
                 </td>
-                <td style={{ 
-                  border: '1px solid #e0e0e0', 
+                <td style={{
+                  border: '1px solid #e0e0e0',
                   padding: '8px',
                   textAlign: 'right',
                   color: entry.type === (entityType === 'customer' ? 'sale' : entityType === 'supplier' ? 'purchase' : 'expense') ? '#2e7d32' : '#bdbdbd',
@@ -184,8 +184,8 @@ const LedgerPDFTemplate = ({
                     : '-'
                   }
                 </td>
-                <td style={{ 
-                  border: '1px solid #e0e0e0', 
+                <td style={{
+                  border: '1px solid #e0e0e0',
                   padding: '8px',
                   textAlign: 'right',
                   color: entry.type === 'payment' ? '#c62828' : '#bdbdbd',
@@ -196,8 +196,8 @@ const LedgerPDFTemplate = ({
                     : '-'
                   }
                 </td>
-                <td style={{ 
-                  border: '1px solid #e0e0e0', 
+                <td style={{
+                  border: '1px solid #e0e0e0',
                   padding: '8px',
                   textAlign: 'right',
                   fontWeight: '600',
@@ -205,12 +205,21 @@ const LedgerPDFTemplate = ({
                 }}>
                   {formatIndianCurrency(entry.runningBalance || entry.runningTotal || 0)}
                 </td>
-                <td style={{ 
-                  border: '1px solid #e0e0e0', 
+                <td style={{
+                  border: '1px solid #e0e0e0',
                   padding: '8px',
                   color: '#455a64'
                 }}>
-                  {entry.note || '-'}
+                  {entry.pN ? (
+                    <div>
+                      <strong>{entry.pN}</strong>
+                      <div style={{ fontSize: '9px', color: '#666' }}>
+                        {entry.q} {entry.u} @ {entry.r ? entry.r.toLocaleString('en-IN') : '-'}
+                      </div>
+                    </div>
+                  ) : (
+                    entry.note || '-'
+                  )}
                 </td>
               </tr>
             ))}
@@ -234,9 +243,9 @@ const LedgerPDFTemplate = ({
             <div style={{ fontSize: '14px', fontWeight: '600', color: '#ef6c00', marginBottom: '8px' }}>
               CLOSING BALANCE
             </div>
-            <div style={{ 
-              fontSize: '24px', 
-              fontWeight: 'bold', 
+            <div style={{
+              fontSize: '24px',
+              fontWeight: 'bold',
               color: closingBalance >= 0 ? '#2e7d32' : '#d32f2f'
             }}>
               {formatIndianCurrency(closingBalance)}
