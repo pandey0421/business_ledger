@@ -47,10 +47,15 @@ const SupplierLedger = ({ supplier, onBack }) => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  // Determine Base Path
+  const basePath = auth.currentUser
+    ? `users/${auth.currentUser.uid}/suppliers/${supplier.id}`
+    : `suppliers/${supplier.id}`;
+
   // Listen to Supplier Parent for Real-time Balance
   useEffect(() => {
-    if (!supplier?.id) return;
-    const unsub = onSnapshot(doc(db, 'suppliers', supplier.id), (docSnap) => {
+    if (!basePath) return;
+    const unsub = onSnapshot(doc(db, basePath), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setRealtimeData({
@@ -61,7 +66,7 @@ const SupplierLedger = ({ supplier, onBack }) => {
       }
     });
     return () => unsub();
-  }, [supplier?.id]);
+  }, [basePath]);
 
   const displayData = userInteractedData || realtimeData;
   const displayBalance = displayData.totalBalance;
@@ -69,10 +74,10 @@ const SupplierLedger = ({ supplier, onBack }) => {
   // Initial Fetch
   useEffect(() => {
     const initLedger = async () => {
-      if (!supplier?.id) return;
+      if (!basePath) return;
       setLoading(true);
       try {
-        const ledgerRef = collection(db, 'suppliers', supplier.id, 'ledger');
+        const ledgerRef = collection(db, basePath, 'ledger');
 
         const countSnap = await getCountFromServer(ledgerRef);
         setTotalTransactionCount(countSnap.data().count);
@@ -97,23 +102,20 @@ const SupplierLedger = ({ supplier, onBack }) => {
       }
     };
     initLedger();
-  }, [supplier?.id]);
+  }, [basePath]);
 
   // Robust Recalculation Function
   const recalculateTotals = async (isManual = false) => {
-    if (!supplier?.id) return;
+    if (!basePath) return;
     if (!isManual && (loading || totalTransactionCount === 0)) return;
-    // If auto-healing, and data already looks good, skip
     if (!isManual && (realtimeData.totalPurchases > 0 || realtimeData.totalPaid > 0)) return;
-    // If auto-healing and we already touched it locally, skip
     if (!isManual && userInteractedData) return;
 
     if (isManual) setMessage('Recalculating totals...');
-    console.log(`Starting ${isManual ? 'MANUAL' : 'Auto'} Recalculation...`);
 
     try {
-      const ledgerRef = collection(db, 'suppliers', supplier.id, 'ledger');
-      const snap = await getDocs(ledgerRef); // Fetch ALL entries
+      const ledgerRef = collection(db, basePath, 'ledger');
+      const snap = await getDocs(ledgerRef);
       let pur = 0, paid = 0, b = 0;
       let lastDate = null;
 
@@ -127,47 +129,15 @@ const SupplierLedger = ({ supplier, onBack }) => {
         }
       });
 
-      // 1. Update UI Immediately
       const newState = { totalPurchases: pur, totalPaid: paid, totalBalance: b };
       setUserInteractedData(newState);
 
-      // 2. Persist to DB (Robust)
-      const uid = auth.currentUser?.uid;
-      const payload = {
+      // Save to DB
+      await updateDoc(doc(db, basePath), {
         ...newState,
-        userId: uid,
         lastActivityDate: lastDate,
-        migrationStatus: 'recalc_v3'
-      };
-
-      let rootSuccess = false;
-      // Try Update Root
-      try {
-        await updateDoc(doc(db, 'suppliers', supplier.id), payload);
-        rootSuccess = true;
-      } catch (e) {
-        console.warn("updateDoc failed, trying setDoc", e);
-      }
-
-      if (!rootSuccess) {
-        try {
-          await setDoc(doc(db, 'suppliers', supplier.id), { ...payload, userId: uid }, { merge: true });
-          rootSuccess = true;
-        } catch (e) {
-          console.error("ROOT WRITE FAILED", e);
-          if (isManual) alert("Failed to save totals: " + e.message);
-        }
-      }
-
-      // Try Update User List (Best Effort)
-      if (uid) {
-        try {
-          await updateDoc(doc(db, 'users', uid, 'suppliers', supplier.id), payload);
-        } catch (e) {
-          // Fallback create
-          setDoc(doc(db, 'users', uid, 'suppliers', supplier.id), { ...payload, name: supplier.name || 'Vendor' }, { merge: true }).catch(err => console.error("Subcollection failed", err));
-        }
-      }
+        updatedAt: serverTimestamp()
+      });
 
       if (isManual) setMessage('Totals updated successfully');
 
@@ -179,17 +149,16 @@ const SupplierLedger = ({ supplier, onBack }) => {
 
   // SELF-HEALING Effect
   useEffect(() => {
-    // Slight delay to allow realtime listener to connect first
     const timer = setTimeout(() => recalculateTotals(false), 2000);
     return () => clearTimeout(timer);
-  }, [supplier?.id, loading, totalTransactionCount, realtimeData, userInteractedData]);
+  }, [basePath, loading, totalTransactionCount, realtimeData, userInteractedData]);
 
   const fetchMoreEntries = async () => {
     if (!lastVisible) return;
     setLoadingMore(true);
     try {
       const q = query(
-        collection(db, 'suppliers', supplier.id, 'ledger'),
+        collection(db, basePath, 'ledger'),
         orderBy('date', 'desc'),
         startAfter(lastVisible),
         limit(10)
@@ -284,11 +253,11 @@ const SupplierLedger = ({ supplier, onBack }) => {
         const netPaid = paidDelta1 + paidDelta2;
         const netBal = balDelta1 + balDelta2;
 
-        await updateDoc(doc(db, 'suppliers', supplier.id, 'ledger', editingEntry.id), {
+        await updateDoc(doc(db, basePath, 'ledger', editingEntry.id), {
           amount: val, type, date, note
         });
 
-        await updateDoc(doc(db, 'suppliers', supplier.id), {
+        await updateDoc(doc(db, basePath), {
           totalBalance: increment(netBal),
           totalPurchases: increment(netDesc),
           totalPaid: increment(netPaid),
@@ -307,7 +276,7 @@ const SupplierLedger = ({ supplier, onBack }) => {
 
       } else {
         // Add
-        const newDocRef = await addDoc(collection(db, 'suppliers', supplier.id, 'ledger'), {
+        const newDocRef = await addDoc(collection(db, basePath, 'ledger'), {
           amount: val, type, date, note, createdAt: serverTimestamp()
         });
 
@@ -315,7 +284,7 @@ const SupplierLedger = ({ supplier, onBack }) => {
         const netPaid = type === 'payment' ? val : 0;
         const netBal = type === 'purchase' ? val : -val;
 
-        await updateDoc(doc(db, 'suppliers', supplier.id), {
+        await updateDoc(doc(db, basePath), {
           totalBalance: increment(netBal),
           totalPurchases: increment(netDesc),
           totalPaid: increment(netPaid),
@@ -366,11 +335,11 @@ const SupplierLedger = ({ supplier, onBack }) => {
     const netBal = entryToDelete.type === 'purchase' ? -val : val;
 
     try {
-      await updateDoc(doc(db, 'suppliers', supplier.id, 'ledger', entryId), {
+      await updateDoc(doc(db, basePath, 'ledger', entryId), {
         isDeleted: true, deletedAt: serverTimestamp()
       });
 
-      await updateDoc(doc(db, 'suppliers', supplier.id), {
+      await updateDoc(doc(db, basePath), {
         totalBalance: increment(netBal),
         totalPurchases: increment(netDesc),
         totalPaid: increment(netPaid),
@@ -405,7 +374,7 @@ const SupplierLedger = ({ supplier, onBack }) => {
 
     try {
       const q = query(
-        collection(db, 'suppliers', supplier.id, 'ledger'),
+        collection(db, basePath, 'ledger'),
         orderBy('date', 'asc')
       );
       const snap = await getDocs(q);

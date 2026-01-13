@@ -141,26 +141,6 @@ const CustomerLedger = ({ customer, onBack }) => {
     fetchInventory();
   }, []);
 
-  // Recalculate Totals Logic (Dynamic)
-  const recalculateTotals = async (isManual = false) => {
-    if (!basePath) return;
-    // ... logic simplifies to updating doc(db, basePath) ...
-    // Copied logic with path subst:
-    if (loading || totalTransactionCount === 0) return;
-
-    // Calculate locally
-    let calcBalance = 0;
-    let calcSales = 0;
-    let calcRecv = 0;
-
-    // NOTE: This local recalc is limited to loaded entries. 
-    // Ideally we run an aggregation query or trusted cloud function.
-    // For now, we skip heavy recalc here to avoid resetting to partial state.
-    // Only 'Delete' does local recalc.
-  };
-
-  // SELF-HEALING Effect (Removed as per instruction's simplified recalculateTotals)
-
   const fetchMoreEntries = async () => {
     if (!lastVisible) return;
     setLoadingMore(true);
@@ -591,6 +571,54 @@ const CustomerLedger = ({ customer, onBack }) => {
     }
   };
 
+  // Recalculate Totals (Manual Fix)
+  const recalculateTotals = async () => {
+    if (!customer?.id) return;
+    if (!window.confirm("This will recalculate the Total Balance by summing up ALL ledger entries. Continue?")) return;
+
+    setMessage('Recalculating totals...');
+    try {
+      const q = query(collection(db, basePath, 'ledger'));
+      const snap = await getDocs(q);
+
+      let calcSales = 0;
+      let calcRecv = 0;
+
+      snap.docs.forEach(d => {
+        const data = d.data();
+        if (!data.isDeleted) {
+          const amt = Number(data.amount) || 0;
+          if (data.type === 'sale') calcSales += amt;
+          else calcRecv += amt; // Payments
+        }
+      });
+
+      const calcBalance = calcSales - calcRecv;
+
+      // Update DB
+      await updateDoc(doc(db, basePath), {
+        totalSales: calcSales,
+        totalReceived: calcRecv,
+        totalBalance: calcBalance,
+        updatedAt: serverTimestamp()
+      });
+
+      // Update Local State (via realtimeData or force set)
+      setUserInteractedData({
+        totalSales: calcSales,
+        totalReceived: calcRecv,
+        totalBalance: calcBalance
+      });
+
+      setMessage('Balance synchronized with entries!');
+      setTimeout(() => setMessage(''), 3000);
+
+    } catch (e) {
+      console.error("Recalc failed", e);
+      setMessage('Recalculation failed');
+    }
+  };
+
   const formatAmount = (num) => {
     return new Intl.NumberFormat('en-IN').format(num);
   };
@@ -792,8 +820,18 @@ const CustomerLedger = ({ customer, onBack }) => {
               <h2 style={{ margin: 0, color: '#1a237e', fontSize: isMobile ? '20px' : '24px', fontWeight: 'bold' }}>
                 {customer.name}
               </h2>
-              <div style={{ fontSize: '12px', color: '#666', fontWeight: '500' }}>
+              <div style={{ fontSize: '12px', color: '#666', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 Txns: {totalTransactionCount} | Balance: {formatAmount(displayBalance)}
+                <button
+                  onClick={recalculateTotals}
+                  style={{
+                    border: 'none', background: 'transparent', cursor: 'pointer',
+                    fontSize: '16px', padding: '0 4px', color: '#1a237e'
+                  }}
+                  title="Recalculate Balance"
+                >
+                  🔄
+                </button>
               </div>
             </div>
           </div>

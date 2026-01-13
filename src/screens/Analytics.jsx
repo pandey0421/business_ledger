@@ -276,14 +276,10 @@ const Analytics = ({ goBack, user }) => {
             // 2. Receivables/Payables
             let totalReceivables = 0;
             customers.forEach(c => {
-                const txs = custLedgers.filter(l => l.entityId === c.id && isInRange(l.date));
+                // Use ALL transactions (Lifetime) for Receivables to match Customer Screen
+                const txs = custLedgers.filter(l => l.entityId === c.id);
                 const s = txs.filter(t => t.type === 'sale').reduce((a, b) => a + Number(b.amount || 0), 0);
                 const p = txs.filter(t => t.type === 'payment').reduce((a, b) => a + Number(b.amount || 0), 0);
-                // In a date-range view, "Receivables" is ambiguous. 
-                // Is it "Receivables accumulated IN THIS PERIOD"? Or "Total Outstanding as of End Date"? 
-                // The dashboard implies "Period Position".
-                // If the user wants "Current Global Receivables", they should clear filters. 
-                // However, matching "Period Sales" implies we only sum sales - payments IN RANGE.
                 totalReceivables += (s - p);
             });
             let totalPayables = 0;

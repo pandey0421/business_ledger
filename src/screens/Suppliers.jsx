@@ -51,14 +51,19 @@ function Suppliers({ goBack }) {
 
 
       const results = await Promise.all(suppliersData.map(async (supplier) => {
-        const ledgerRef = collection(db, 'suppliers', supplier.id, 'ledger');
+        // User Scope Path
+        const ledgerRef = collection(db, 'users', userId, 'suppliers', supplier.id, 'ledger');
         const ledgerSnapshot = await getDocs(ledgerRef);
         let supplierPurchases = 0;
         let supplierPayments = 0;
+
         ledgerSnapshot.docs.forEach(ledgerDoc => {
           const data = ledgerDoc.data();
-          if (data.type === 'purchase') supplierPurchases += Number(data.amount) || 0;
-          if (data.type === 'payment') supplierPayments += Number(data.amount) || 0;
+          if (!data.isDeleted) {
+            const val = Number(data.amount) || 0;
+            if (data.type === 'purchase') supplierPurchases += val;
+            if (data.type === 'payment') supplierPayments += val;
+          }
         });
         return { purchases: supplierPurchases, payments: supplierPayments };
       }));
