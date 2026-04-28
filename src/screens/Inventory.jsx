@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth } from '../firebase';
-import { collection, addDoc, serverTimestamp, getDocs, query, limit, orderBy, deleteDoc, doc } from 'firebase/firestore';
+import { inventoryService } from '../services/inventoryService';
 import { toast } from 'react-hot-toast';
 import { Trash2 } from 'lucide-react';
 
@@ -9,7 +8,6 @@ function Inventory({ goBack, user }) {
     const [loading, setLoading] = useState(true);
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
-    // Form State - using abbreviated keys as per schema
     const [formData, setFormData] = useState({
         n: '', // Name
         u: 'pcs', // Unit
@@ -18,9 +16,6 @@ function Inventory({ goBack, user }) {
         qty: '' // Quantity
     });
 
-    const userId = user?.uid || auth.currentUser?.uid;
-    const productsRef = userId ? collection(db, 'users', userId, 'products') : null;
-
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 768);
         window.addEventListener('resize', handleResize);
@@ -28,33 +23,13 @@ function Inventory({ goBack, user }) {
     }, []);
 
     const fetchProducts = async () => {
-        if (!productsRef) {
-            setLoading(false);
-            return;
-        }
         setLoading(true);
         try {
-            // Fetch - Limit 20, sort by created date desc if possible, or just default
-            // Note: orderBy might require an index if mixed with other filters, but simple query should work
-            const q = query(productsRef, orderBy('createdAt', 'desc'), limit(20));
-            const querySnapshot = await getDocs(q);
-            const fetchedProducts = querySnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
+            const fetchedProducts = await inventoryService.getProducts();
             setProducts(fetchedProducts);
         } catch (error) {
-            console.error("Error fetching products:", error);
-            // Fallback if index missing for orderBy
-            try {
-                const qFallback = query(productsRef, limit(20));
-                const snapshot = await getDocs(qFallback);
-                const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                setProducts(data);
-            } catch (err) {
-                console.error("Critical error fetching products", err);
-                toast.error("Failed to load inventory");
-            }
+            console.error("Critical error fetching products", error);
+            toast.error("Failed to load inventory");
         } finally {
             setLoading(false);
         }
@@ -62,7 +37,7 @@ function Inventory({ goBack, user }) {
 
     useEffect(() => {
         fetchProducts();
-    }, [userId]);
+    }, []);
 
     const validateForm = () => {
         if (!formData.n.trim()) return "Product Name is required";
@@ -75,10 +50,6 @@ function Inventory({ goBack, user }) {
 
     const handleAddProduct = async (e) => {
         e.preventDefault();
-        if (!userId) {
-            toast.error("You must be logged in");
-            return;
-        }
 
         const error = validateForm();
         if (error) {
@@ -87,13 +58,12 @@ function Inventory({ goBack, user }) {
         }
 
         try {
-            await addDoc(productsRef, {
+            await inventoryService.addProduct({
                 n: formData.n.trim(),
                 u: formData.u.trim(),
                 cp: Number(formData.cp),
                 sp: Number(formData.sp),
-                qty: Number(formData.qty),
-                createdAt: serverTimestamp()
+                qty: Number(formData.qty)
             });
 
             toast.success("Product added successfully!");
@@ -111,7 +81,7 @@ function Inventory({ goBack, user }) {
             const idsToDelete = Array.isArray(productIds) ? productIds : [productIds];
 
             await Promise.all(idsToDelete.map(id =>
-                deleteDoc(doc(db, 'users', userId, 'products', id))
+                inventoryService.deleteProduct(id)
             ));
 
             toast.success("Product deleted");
@@ -125,31 +95,64 @@ function Inventory({ goBack, user }) {
     // Merge duplicates for display
     const mergedProducts = React.useMemo(() => {
         const map = new Map();
-        // Products are already sorted by date descending, so the first one we see is the latest
+        
         products.forEach(p => {
             const normalizedName = p.n ? p.n.trim().toLowerCase() : '';
             if (!normalizedName) return;
 
+            const pQty = Number(p.qty) || 0;
+            const pCp = Number(p.cp) || 0;
+            const pSp = Number(p.sp) || 0;
+
             if (map.has(normalizedName)) {
                 const existing = map.get(normalizedName);
-                // Sum quantities
-                existing.qty = (Number(existing.qty) || 0) + (Number(p.qty) || 0);
-                // Collect IDs
+                
+                // Calculate weighted averages before updating quantity
+                const newTotalQty = existing.qty + pQty;
+                
+                if (newTotalQty > 0) {
+                    existing.cp = ((existing.cp * existing.qty) + (pCp * pQty)) / newTotalQty;
+                    existing.sp = ((existing.sp * existing.qty) + (pSp * pQty)) / newTotalQty;
+                }
+                
+                existing.qty = newTotalQty;
                 existing.ids.push(p.id);
-                // Keep the prices/unit from the LATEST entry (already in 'existing' due to sort order)
             } else {
                 map.set(normalizedName, {
                     ...p,
                     ids: [p.id],
-                    qty: Number(p.qty) || 0
+                    qty: pQty,
+                    cp: pCp,
+                    sp: pSp
                 });
             }
         });
-        return Array.from(map.values());
+        
+        // Round averages to 2 decimal places for cleaner display
+        return Array.from(map.values()).map(p => ({
+            ...p,
+            cp: Math.round(p.cp * 100) / 100,
+            sp: Math.round(p.sp * 100) / 100
+        }));
     }, [products]);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
+        
+        if (name === 'n') {
+            const existingProduct = mergedProducts.find(p => p.n && p.n.trim().toLowerCase() === value.trim().toLowerCase());
+            if (existingProduct) {
+                setFormData(prev => ({
+                    ...prev,
+                    n: value,
+                    u: existingProduct.u || 'pcs',
+                    cp: existingProduct.cp || '',
+                    sp: existingProduct.sp || ''
+                }));
+                return;
+            }
+        }
+        
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
@@ -293,11 +296,18 @@ function Inventory({ goBack, user }) {
                         <label style={styles.label}>Item Name</label>
                         <input
                             name="n"
+                            list="existing-products"
                             value={formData.n}
                             onChange={handleChange}
                             placeholder="e.g. Pillow Cover"
                             style={styles.input}
+                            autoComplete="off"
                         />
+                        <datalist id="existing-products">
+                            {mergedProducts.map((p, idx) => (
+                                <option key={idx} value={p.n} />
+                            ))}
+                        </datalist>
                     </div>
                     <div>
                         <label style={styles.label}>Unit</label>

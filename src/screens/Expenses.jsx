@@ -1,10 +1,68 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth } from '../firebase';
-import { collection, addDoc, serverTimestamp, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { expenseService } from '../services/expenseService';
 import ExpenseLedger from './ExpenseLedger';
 
-function Expenses({ goBack }) {
+const ExpenseForm = React.memo(({ isMobile, editingExpense, onAdd, onUpdate, onCancel }) => {
   const [name, setName] = useState('');
+
+  useEffect(() => {
+    if (editingExpense) {
+      setName(editingExpense.name);
+    } else {
+      setName('');
+    }
+  }, [editingExpense]);
+
+  const handleSubmit = () => {
+    if (editingExpense) onUpdate(editingExpense.id, name);
+    else onAdd(name);
+  };
+
+  return (
+    <div style={{
+      display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: '16px', background: '#fafafa',
+      padding: isMobile ? '16px' : '24px', borderRadius: '20px', border: '1px solid #f0f0f0',
+      marginBottom: isMobile ? '24px' : '32px', alignItems: 'flex-start'
+    }}>
+      <div style={{ flex: isMobile ? '1 1 100%' : '1', minWidth: isMobile ? 'auto' : '220px', width: isMobile ? '100%' : 'auto' }}>
+        <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#455a64', fontSize: '12px' }}>
+          Expense Category Name *
+        </label>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Enter expense category name"
+          style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: (editingExpense && !name.trim()) ? '2px solid #ef5350' : '1px solid #e0e0e0', outline: 'none', fontSize: '14px', boxSizing: 'border-box', fontWeight: '500' }}
+        />
+      </div>
+      {editingExpense ? (
+        <>
+          <button
+            onClick={handleSubmit} disabled={!name.trim()}
+            style={{ padding: '12px 24px', borderRadius: '12px', border: 'none', backgroundColor: name.trim() ? '#c62828' : '#e0e0e0', color: name.trim() ? '#fff' : '#9e9e9e', cursor: name.trim() ? 'pointer' : 'not-allowed', fontWeight: '600', fontSize: '14px', whiteSpace: 'nowrap', flex: isMobile ? '1 1 100%' : '0 0 auto', height: '46px', alignSelf: 'flex-end', width: isMobile ? '100%' : 'auto' }}
+          >
+            Update
+          </button>
+          <button
+            onClick={onCancel}
+            style={{ padding: '12px 24px', borderRadius: '12px', border: '1px solid #e0e0e0', backgroundColor: 'white', color: '#546e7a', cursor: 'pointer', fontSize: '14px', fontWeight: '600', flex: isMobile ? '1 1 100%' : '0 0 auto', height: '46px', alignSelf: 'flex-end', width: isMobile ? '100%' : 'auto' }}
+          >
+            Cancel
+          </button>
+        </>
+      ) : (
+        <button
+          onClick={handleSubmit} disabled={!name.trim()}
+          style={{ padding: '12px 24px', borderRadius: '12px', border: 'none', backgroundColor: name.trim() ? '#c62828' : '#e0e0e0', color: name.trim() ? '#fff' : '#9e9e9e', cursor: name.trim() ? 'pointer' : 'not-allowed', fontWeight: '600', fontSize: '14px', whiteSpace: 'nowrap', flex: isMobile ? '1 1 100%' : '0 0 auto', height: '46px', alignSelf: 'flex-end', boxShadow: name.trim() ? '0 4px 12px rgba(198, 40, 40, 0.2)' : 'none', width: isMobile ? '100%' : 'auto' }}
+        >
+          Add Category
+        </button>
+      )}
+    </div>
+  );
+});
+
+function Expenses({ goBack }) {
   const [message, setMessage] = useState('');
   const [expenses, setExpenses] = useState([]);
   const [selectedExpense, setSelectedExpense] = useState(null);
@@ -21,63 +79,31 @@ function Expenses({ goBack }) {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  const userId = auth.currentUser?.uid;
-  const expenseRef = userId ? collection(db, 'users', userId, 'expenses') : null;
-
   const fetchExpenses = async () => {
-    if (!expenseRef) return;
-    try {
-      const snapshot = await getDocs(expenseRef);
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), userId }))
-        .filter(d => !d.isDeleted);
-      setExpenses(data);
-    } catch (err) {
-      console.error(err);
-      setMessage('Failed to load expenses');
-    }
-  };
-
-  const fetchOverallStats = async () => {
-    if (!expenseRef || !userId) {
-      setLoadingStats(false);
-      return;
-    }
     setLoadingStats(true);
     try {
-      const snapshot = await getDocs(expenseRef);
-      const expensesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter(d => !d.isDeleted);
+      const snapExpenses = await expenseService.getExpenseCategories();
 
-
-      const results = await Promise.all(expensesData.map(async (expense) => {
-        // Check User Scope first
-        let ledgerRef = collection(db, 'users', userId, 'expenses', expense.id, 'ledger');
-        let ledgerSnapshot = await getDocs(ledgerRef);
-
-        // If empty, check Legacy Root scope (just in case data is there)
-        if (ledgerSnapshot.empty) {
-          const legacyRef = collection(db, 'expenses', expense.id, 'ledger');
-          const legacySnap = await getDocs(legacyRef);
-          if (!legacySnap.empty) {
-            ledgerSnapshot = legacySnap;
-          }
-        }
-
-        let categoryExpenses = 0;
-        ledgerSnapshot.docs.forEach(ledgerDoc => {
-          categoryExpenses += Number(ledgerDoc.data().amount) || 0;
-        });
-        return categoryExpenses;
+      // Use pre-computed totals stored on each expense record
+      const finalExpenses = snapExpenses.map(eData => ({
+        ...eData,
+        // The ledger recalculation should keep this field in sync
+        totalAmount: Number(eData.total_amount) || 0
       }));
 
-      const totalExpenses = results.reduce((a, b) => a + b, 0);
+      setExpenses(finalExpenses);
+
+      // Calculate Overall Stats from pre-computed values
+      const totalExpenses = finalExpenses.reduce((sum, e) => sum + e.totalAmount, 0);
 
       setOverallStats({
         totalExpenses: Math.max(0, totalExpenses),
-        totalCategories: expensesData.length
+        totalCategories: finalExpenses.length
       });
+
     } catch (err) {
-      console.error('Failed to fetch overall stats:', err);
+      console.error(err);
+      setMessage('Failed to load expenses');
     } finally {
       setLoadingStats(false);
     }
@@ -85,29 +111,12 @@ function Expenses({ goBack }) {
 
   useEffect(() => {
     fetchExpenses();
-    fetchOverallStats();
-  }, [userId]);
+  }, []);
 
-  useEffect(() => {
-    if (expenses.length > 0) fetchOverallStats();
-  }, [expenses]);
-
-  const handleAddExpense = async () => {
-    if (!name.trim()) {
-      setMessage('Name is required');
-      return;
-    }
-    if (!expenseRef) {
-      setMessage('No user logged in');
-      return;
-    }
+  const handleAddExpense = async (newName) => {
     try {
-      await addDoc(expenseRef, {
-        name: name.trim(),
-        createdAt: serverTimestamp()
-      });
+      await expenseService.addExpenseCategory(newName.trim());
       setMessage('Expense category added successfully');
-      setName('');
       fetchExpenses();
     } catch (err) {
       console.error(err);
@@ -115,19 +124,11 @@ function Expenses({ goBack }) {
     }
   };
 
-  const handleUpdateExpense = async (expenseId) => {
-    if (!editingExpense || !expenseRef) return;
-    if (!editingExpense.name.trim()) {
-      setMessage('Name is required');
-      return;
-    }
+  const handleUpdateExpense = async (expenseId, newName) => {
     try {
-      await updateDoc(doc(db, 'users', userId, 'expenses', expenseId), {
-        name: editingExpense.name.trim()
-      });
+      await expenseService.updateExpenseCategory(expenseId, newName.trim());
       setMessage('Expense category updated successfully');
       setEditingExpense(null);
-      setName('');
       fetchExpenses();
     } catch (err) {
       console.error(err);
@@ -138,10 +139,7 @@ function Expenses({ goBack }) {
   const handleDeleteExpense = async (expenseId) => {
     if (!window.confirm('Are you sure you want to move this expense category to the Recycle Bin?')) return;
     try {
-      await updateDoc(doc(db, 'users', userId, 'expenses', expenseId), {
-        isDeleted: true,
-        deletedAt: serverTimestamp()
-      });
+      await expenseService.deleteExpenseCategory(expenseId);
       setMessage('Expense category moved to Recycle Bin');
       fetchExpenses();
     } catch (err) {
@@ -151,8 +149,7 @@ function Expenses({ goBack }) {
   };
 
   const startEditExpense = (expense) => {
-    setEditingExpense({ ...expense });
-    setName(expense.name);
+    setEditingExpense(expense);
   };
 
   const formatAmount = (num) => {
@@ -231,7 +228,7 @@ function Expenses({ goBack }) {
         <div style={{
           marginBottom: isMobile ? '24px' : '32px',
           padding: isMobile ? '20px' : '32px',
-          background: 'white',
+
           borderRadius: '20px',
           border: '1px solid #e0e0e0',
           boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
@@ -272,108 +269,13 @@ function Expenses({ goBack }) {
         </div>
 
         {/* Add/Edit Form */}
-        <div style={{
-          display: 'flex',
-          gap: isMobile ? '12px' : '16px',
-          flexWrap: 'wrap',
-          marginBottom: isMobile ? '24px' : '32px',
-          flexDirection: isMobile ? 'column' : 'row',
-          backgroundColor: '#fafafa',
-          padding: isMobile ? '16px' : '24px',
-          borderRadius: '20px',
-          border: '1px solid #f0f0f0'
-        }}>
-          <div style={{ flex: isMobile ? '1 1 100%' : '1', minWidth: isMobile ? 'auto' : '220px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#455a64', fontSize: '12px' }}>
-              Expense Category Name *
-            </label>
-            <input
-              value={editingExpense ? editingExpense.name : name}
-              onChange={(e) => {
-                if (editingExpense) {
-                  setEditingExpense({ ...editingExpense, name: e.target.value });
-                } else {
-                  setName(e.target.value);
-                }
-              }}
-              placeholder="Enter expense category name"
-              style={{
-                width: '100%',
-                padding: '12px 16px',
-                borderRadius: '12px',
-                border: editingExpense && !editingExpense.name.trim() ? '2px solid #ef5350' : '1px solid #e0e0e0',
-                outline: 'none',
-                fontSize: '14px',
-                boxSizing: 'border-box',
-                fontWeight: '500'
-              }}
-            />
-          </div>
-          {editingExpense ? (
-            <>
-              <button
-                onClick={() => handleUpdateExpense(editingExpense.id)}
-                disabled={!editingExpense.name.trim()}
-                style={{
-                  padding: '12px 24px',
-                  borderRadius: '12px',
-                  border: 'none',
-                  backgroundColor: editingExpense.name.trim() ? '#c62828' : '#e0e0e0',
-                  color: editingExpense.name.trim() ? '#fff' : '#9e9e9e',
-                  cursor: editingExpense.name.trim() ? 'pointer' : 'not-allowed',
-                  fontWeight: '600',
-                  fontSize: '14px',
-                  whiteSpace: 'nowrap',
-                  flex: isMobile ? '1 1 100%' : '0 0 auto',
-                  height: '46px', alignSelf: 'flex-end'
-                }}
-              >
-                Update
-              </button>
-              <button
-                onClick={() => {
-                  setEditingExpense(null);
-                  setName('');
-                }}
-                style={{
-                  padding: '12px 24px',
-                  borderRadius: '12px',
-                  border: '1px solid #e0e0e0',
-                  backgroundColor: 'white',
-                  color: '#546e7a',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  flex: isMobile ? '1 1 100%' : '0 0 auto',
-                  height: '46px', alignSelf: 'flex-end'
-                }}
-              >
-                Cancel
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={handleAddExpense}
-              disabled={!name.trim()}
-              style={{
-                padding: '12px 24px',
-                borderRadius: '12px',
-                border: 'none',
-                backgroundColor: name.trim() ? '#c62828' : '#e0e0e0',
-                color: name.trim() ? '#fff' : '#9e9e9e',
-                cursor: name.trim() ? 'pointer' : 'not-allowed',
-                fontWeight: '600',
-                fontSize: '14px',
-                whiteSpace: 'nowrap',
-                flex: isMobile ? '1 1 100%' : '0 0 auto',
-                height: '46px', alignSelf: 'flex-end',
-                boxShadow: name.trim() ? '0 4px 12px rgba(198, 40, 40, 0.2)' : 'none'
-              }}
-            >
-              Add Category
-            </button>
-          )}
-        </div>
+        <ExpenseForm 
+           isMobile={isMobile}
+           editingExpense={editingExpense}
+           onAdd={handleAddExpense}
+           onUpdate={handleUpdateExpense}
+           onCancel={() => setEditingExpense(null)}
+        />
 
         {/* Messages */}
         {message && (
@@ -428,7 +330,7 @@ function Expenses({ goBack }) {
                   position: 'relative',
                   overflow: 'hidden'
                 }}
-                onClick={() => setSelectedExpense({ ...expense, userId })}
+                onClick={() => setSelectedExpense({ ...expense })}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = 'translateY(-4px)';
                   e.currentTarget.style.boxShadow = '0 12px 24px rgba(0,0,0,0.08)';

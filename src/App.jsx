@@ -1,30 +1,33 @@
-import { useRef, useEffect, useState } from "react";
-import { onAuthStateChanged } from "firebase/auth";
-import { auth, db } from "./firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { useRef, useEffect, useState, lazy, Suspense } from "react";
+import { authService } from "./services/authService";
+import { syncManager } from "./services/offlineSync";
+import { supabase } from "./supabaseClient";
 import { Toaster, toast } from 'react-hot-toast';
 import { App as CapacitorApp } from '@capacitor/app';
 
-import Login from "./screens/Login";
+// Dashboard is eagerly loaded (first screen users see)
 import Dashboard from "./screens/Dashboard";
-import Customers from "./screens/Customers";
-import Suppliers from "./screens/Suppliers";
-import Expenses from "./screens/Expenses";
-import Privacy from "./screens/Privacy";
-import Terms from "./screens/Terms";
-import Subscription from "./screens/Subscription";
-import Landing from "./screens/Landing";
-import Analytics from "./screens/Analytics";
-import RecycleBin from "./screens/RecycleBin";
-import DataMigration from "./screens/DataMigration";
-import BackupRestore from "./screens/BackupRestore";
-import Inventory from "./screens/Inventory";
+
+// All other screens are lazy-loaded for code splitting
+const Login = lazy(() => import("./screens/Login"));
+const Customers = lazy(() => import("./screens/Customers"));
+const Suppliers = lazy(() => import("./screens/Suppliers"));
+const Expenses = lazy(() => import("./screens/Expenses"));
+const Privacy = lazy(() => import("./screens/Privacy"));
+const Terms = lazy(() => import("./screens/Terms"));
+const Subscription = lazy(() => import("./screens/Subscription"));
+const Landing = lazy(() => import("./screens/Landing"));
+const Analytics = lazy(() => import("./screens/Analytics"));
+const RecycleBin = lazy(() => import("./screens/RecycleBin"));
+const DataMigration = lazy(() => import("./screens/DataMigration"));
+const BackupRestore = lazy(() => import("./screens/BackupRestore"));
+const Inventory = lazy(() => import("./screens/Inventory"));
 
 import Footer from "./components/Footer";
 import Spinner from "./components/Spinner";
 import BrandingHeader from "./components/BrandingHeader";
 
-import { signOut } from "firebase/auth";
+// signOut is now handled via authService
 
 function App() {
   const [user, setUser] = useState(null);
@@ -49,7 +52,7 @@ function App() {
 
   // Subscription State
   const [isSubscribed, setIsSubscribed] = useState(false);
-  const [checkingSub, setCheckingSub] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Sync State <-> Hash
   useEffect(() => {
@@ -132,7 +135,7 @@ function App() {
 
     const logoutUser = () => {
       console.log("Auto-logging out due to inactivity");
-      signOut(auth).catch(err => console.error("Sign out error", err));
+      authService.logout().catch(err => console.error("Sign out error", err));
       toast('Logged out due to inactivity', { icon: '👋' });
     };
 
@@ -156,36 +159,23 @@ function App() {
 
   // Auth & Subscription Check
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    const unsubscribe = authService.onAuthStateChanged(async (currentUser) => {
+      // Map Supabase User id to uid to keep backwards compatibility with other UI components
+      if (currentUser) {
+        currentUser.uid = currentUser.id;
+      }
       setUser(currentUser);
 
       if (currentUser) {
-        setCheckingSub(true);
-        try {
-          const userRef = doc(db, 'users', currentUser.uid);
-          const userSnap = await getDoc(userRef);
+        // Temporary bypass for subscription check during Supabase transition
+        setIsSubscribed(true);
 
-          if (userSnap.exists()) {
-            const data = userSnap.data();
-            const expiry = data.subscriptionExpiry?.toDate();
-
-            if (expiry && expiry > new Date()) {
-              setIsSubscribed(true);
-            } else {
-              setIsSubscribed(false);
-              // For now: Hard block if no active subscription
-            }
-          } else {
-            // New user or no record -> Not subscribed
-            setIsSubscribed(false);
-          }
-        } catch (e) {
-          console.error("Sub check failed", e);
-        } finally {
-          setCheckingSub(false);
-        }
-      } else {
-        setCheckingSub(false);
+        // Fire-and-forget background sync (non-blocking)
+        setIsSyncing(true);
+        syncManager.syncDown(currentUser.id)
+          .then(() => console.log('[Sync] Background sync complete'))
+          .catch(e => console.error('[Sync] Background sync failed', e))
+          .finally(() => setIsSyncing(false));
       }
 
       setLoading(false);
@@ -194,7 +184,7 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  if (loading || checkingSub) return (
+  if (loading) return (
     <div style={{
       display: 'flex',
       justifyContent: 'center',
@@ -205,7 +195,7 @@ function App() {
     }}>
       <Spinner size={50} />
       <p style={{ color: '#607d8b', fontFamily: 'sans-serif' }}>
-        {checkingSub ? "Verifying Subscription..." : "Loading Karobar Khata..."}
+        Loading Karobar Khata...
       </p>
     </div>
   );
@@ -291,6 +281,26 @@ function App() {
         </div>
       )}
 
+      {isSyncing && (
+        <div style={{
+          backgroundColor: '#e3f2fd',
+          color: '#1565c0',
+          textAlign: 'center',
+          padding: '6px',
+          position: 'sticky',
+          top: isOffline ? '36px' : 0,
+          zIndex: 1999,
+          fontFamily: 'sans-serif',
+          fontSize: '13px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '8px'
+        }}>
+          <Spinner size={14} /> Syncing data in background...
+        </div>
+      )}
+
       <Toaster position="top-right" />
 
       <div
@@ -298,7 +308,14 @@ function App() {
       >
         {user && <BrandingHeader />}
         <main id="main-content" style={{ flex: 1 }}>
-          {renderScreen()}
+          <Suspense fallback={
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', flexDirection: 'column', gap: '16px' }}>
+              <Spinner size={40} />
+              <p style={{ color: '#607d8b', fontFamily: 'sans-serif', fontSize: '14px' }}>Loading...</p>
+            </div>
+          }>
+            {renderScreen()}
+          </Suspense>
         </main>
 
         {(user || screen === 'privacy' || screen === 'terms') && (

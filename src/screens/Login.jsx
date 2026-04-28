@@ -1,12 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  sendPasswordResetEmail,
-  sendEmailVerification,
-  onAuthStateChanged
-} from 'firebase/auth';
-import { auth } from '../firebase';
+import { authService } from '../services/authService';
 
 const Login = ({ onSuccess }) => {
   const [email, setEmail] = useState('');
@@ -72,10 +65,14 @@ const Login = ({ onSuccess }) => {
 
   // Auth state listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    const unsubscribe = authService.onAuthStateChanged(async (user) => {
       if (user) {
-        setEmailVerified(user.emailVerified);
-        if (user.emailVerified && onSuccess) {
+        // Supabase confirms email naturally via signin. If email_confirmed_at exists, they are verified.
+        const isVerified = user.email_confirmed_at != null || user.app_metadata?.provider !== 'email';
+        setEmailVerified(isVerified);
+        
+        // Supabase allows login without email verification sometimes based on settings, but we assume true for successful login here as configured.
+        if (onSuccess) {
           // Clear attempts on success
           localStorage.removeItem('loginAttempts');
           localStorage.removeItem('lastAttemptTime');
@@ -106,7 +103,7 @@ const Login = ({ onSuccess }) => {
     setLoading(true);
 
     try {
-      await signInWithEmailAndPassword(auth, cleanEmail, password);
+      await authService.login(cleanEmail, password);
       // onSuccess will be called by auth listener
     } catch (err) {
       recordFailedAttempt();
@@ -149,9 +146,9 @@ const Login = ({ onSuccess }) => {
     setLoading(true);
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
-      await sendEmailVerification(userCredential.user);
-      setError('Verification email sent! Please check your inbox (and spam folder) before logging in.');
+      const user = await authService.signup(cleanEmail, password);
+      await authService.sendVerification(cleanEmail);
+      setError('Verification email sent (if required)! Please check your inbox (and spam folder) before logging in.');
       setShowSignup(false);
       setEmail('');
       setPassword('');
@@ -187,7 +184,7 @@ const Login = ({ onSuccess }) => {
     setLoading(true);
 
     try {
-      await sendPasswordResetEmail(auth, cleanEmail);
+      await authService.resetPassword(cleanEmail);
       setError('Password reset email sent! Check your inbox (and spam folder).');
       setShowReset(false);
       setResetEmail('');

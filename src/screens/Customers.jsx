@@ -1,11 +1,82 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth } from '../firebase';
-import { collection, addDoc, serverTimestamp, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { customerService } from '../services/customerService';
 import CustomerLedger from './CustomerLedger';
 
-function Customers({ goBack }) {
+const CustomerForm = React.memo(({ isMobile, editingCustomer, onAdd, onUpdate, onCancel }) => {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+
+  useEffect(() => {
+    if (editingCustomer) {
+      setName(editingCustomer.name);
+      setPhone(editingCustomer.phone);
+    } else {
+      setName('');
+      setPhone('');
+    }
+  }, [editingCustomer]);
+
+  const handleSubmit = () => {
+    if (editingCustomer) onUpdate(editingCustomer.id, name, phone);
+    else onAdd(name, phone);
+  };
+
+  return (
+    <div style={{
+      display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: '16px', background: 'white',
+      padding: '24px', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
+      marginBottom: '24px', alignItems: 'flex-start'
+    }}>
+      <div style={{ flex: isMobile ? '1 1 100%' : '1 1 220px', minWidth: isMobile ? 'auto' : '220px', width: isMobile ? '100%' : 'auto' }}>
+        <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#455a64', fontSize: '12px' }}>
+          Customer Name *
+        </label>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Enter customer name"
+          style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: (editingCustomer && !name.trim()) ? '2px solid #ef5350' : '1px solid #e0e0e0', outline: 'none', fontSize: '14px', boxSizing: 'border-box', fontWeight: '500' }}
+        />
+      </div>
+      <div style={{ flex: isMobile ? '1 1 100%' : '1 1 220px', minWidth: isMobile ? 'auto' : '220px', width: isMobile ? '100%' : 'auto' }}>
+        <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#455a64', fontSize: '12px' }}>
+          Phone (optional)
+        </label>
+        <input
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="Enter phone number"
+          style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1px solid #e0e0e0', outline: 'none', fontSize: '14px', boxSizing: 'border-box', fontWeight: '500' }}
+        />
+      </div>
+      {editingCustomer ? (
+        <>
+          <button
+            onClick={handleSubmit} disabled={!name.trim()}
+            style={{ padding: '12px 24px', borderRadius: '12px', border: 'none', backgroundColor: name.trim() ? '#43a047' : '#e0e0e0', color: name.trim() ? '#fff' : '#9e9e9e', cursor: name.trim() ? 'pointer' : 'not-allowed', fontWeight: '600', fontSize: '14px', whiteSpace: 'nowrap', flex: isMobile ? '1 1 100%' : '0 0 auto', height: '46px', alignSelf: 'flex-end', width: isMobile ? '100%' : 'auto' }}
+          >
+            Update
+          </button>
+          <button
+            onClick={onCancel}
+            style={{ padding: '12px 24px', borderRadius: '12px', border: '1px solid #e0e0e0', backgroundColor: 'white', color: '#546e7a', cursor: 'pointer', fontSize: '14px', fontWeight: '600', flex: isMobile ? '1 1 100%' : '0 0 auto', height: '46px', alignSelf: 'flex-end', width: isMobile ? '100%' : 'auto' }}
+          >
+            Cancel
+          </button>
+        </>
+      ) : (
+        <button
+          onClick={handleSubmit} disabled={!name.trim()}
+          style={{ padding: '12px 24px', borderRadius: '12px', border: 'none', backgroundColor: name.trim() ? '#43a047' : '#e0e0e0', color: name.trim() ? '#fff' : '#9e9e9e', cursor: name.trim() ? 'pointer' : 'not-allowed', fontWeight: '600', fontSize: '14px', whiteSpace: 'nowrap', flex: isMobile ? '1 1 100%' : '0 0 auto', height: '46px', alignSelf: 'flex-end', boxShadow: name.trim() ? '0 4px 12px rgba(67, 160, 71, 0.2)' : 'none', width: isMobile ? '100%' : 'auto' }}
+        >
+          Add Customer
+        </button>
+      )}
+    </div>
+  );
+});
+
+function Customers({ goBack }) {
   const [message, setMessage] = useState('');
   const [customers, setCustomers] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
@@ -27,47 +98,26 @@ function Customers({ goBack }) {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  const userId = auth.currentUser?.uid;
-  const customerRef = userId ? collection(db, 'users', userId, 'customers') : null;
 
   const fetchCustomers = async () => {
-    if (!customerRef || !userId) return;
     setLoadingStats(true);
     try {
-      const snapshot = await getDocs(customerRef);
+      const snapCustomers = await customerService.getCustomers();
 
-      const enrichedCustomers = await Promise.all(snapshot.docs.map(async (docSnap) => {
-        const cData = { id: docSnap.id, ...docSnap.data(), userId };
-        if (cData.isDeleted) return null;
-
-        // Correct Path: users/{uid}/customers/{id}/ledger
-        const ledgerRef = collection(db, 'users', userId, 'customers', docSnap.id, 'ledger');
-        const ledgerSnap = await getDocs(ledgerRef);
-
-        let sales = 0;
-        let received = 0;
-        ledgerSnap.docs.forEach(l => {
-          const d = l.data();
-          if (!d.isDeleted) {
-            if (d.type === 'sale') sales += Number(d.amount) || 0;
-            if (d.type === 'payment') received += Number(d.amount) || 0;
-          }
-        });
-
-        return {
-          ...cData,
-          totalSales: sales,
-          totalReceived: received,
-          totalBalance: sales - received
-        };
+      // Use pre-computed totals stored on each customer record
+      // (these are updated by the ledger save/delete flow in CustomerLedger)
+      const finalCustomers = snapCustomers.map(cData => ({
+        ...cData,
+        totalSales: Number(cData.total_sales) || 0,
+        totalReceived: Number(cData.total_received) || 0,
+        totalBalance: Number(cData.total_balance) || 0
       }));
 
-      const finalCustomers = enrichedCustomers.filter(c => c !== null);
       setCustomers(finalCustomers);
 
-      // Calculate Overall Stats directly
-      const totalSales = finalCustomers.reduce((sum, c) => sum + (c.totalSales || 0), 0);
-      const totalPayments = finalCustomers.reduce((sum, c) => sum + (c.totalReceived || 0), 0);
+      // Calculate Overall Stats from pre-computed values
+      const totalSales = finalCustomers.reduce((sum, c) => sum + c.totalSales, 0);
+      const totalPayments = finalCustomers.reduce((sum, c) => sum + c.totalReceived, 0);
 
       setOverallStats({
         totalSales,
@@ -118,26 +168,15 @@ function Customers({ goBack }) {
 
   useEffect(() => {
     fetchCustomers();
-  }, [userId]);
+  }, []);
 
-  const handleAddCustomer = async () => {
-    if (!name.trim()) {
-      setMessage('Name is required');
-      return;
-    }
-    if (!customerRef) {
-      setMessage('No user logged in');
-      return;
-    }
+  const handleAddCustomer = async (newName, newPhone) => {
     try {
-      await addDoc(customerRef, {
-        name: name.trim(),
-        phone: phone.trim(),
-        createdAt: serverTimestamp()
+      await customerService.addCustomer({
+        name: newName.trim(),
+        phone: newPhone.trim()
       });
       setMessage('Customer added successfully');
-      setName('');
-      setPhone('');
       fetchCustomers();
     } catch (err) {
       console.error(err);
@@ -145,21 +184,14 @@ function Customers({ goBack }) {
     }
   };
 
-  const handleUpdateCustomer = async (customerId) => {
-    if (!editingCustomer || !customerRef) return;
-    if (!editingCustomer.name.trim()) {
-      setMessage('Name is required');
-      return;
-    }
+  const handleUpdateCustomer = async (customerId, newName, newPhone) => {
     try {
-      await updateDoc(doc(db, 'users', userId, 'customers', customerId), {
-        name: editingCustomer.name.trim(),
-        phone: editingCustomer.phone.trim()
+      await customerService.updateCustomer(customerId, {
+        name: newName.trim(),
+        phone: newPhone.trim()
       });
       setMessage('Customer updated successfully');
       setEditingCustomer(null);
-      setName('');
-      setPhone('');
       fetchCustomers();
     } catch (err) {
       console.error(err);
@@ -170,10 +202,7 @@ function Customers({ goBack }) {
   const handleDeleteCustomer = async (customerId) => {
     if (!window.confirm('Are you sure you want to move this customer to the Recycle Bin?')) return;
     try {
-      await updateDoc(doc(db, 'users', userId, 'customers', customerId), {
-        isDeleted: true,
-        deletedAt: serverTimestamp()
-      });
+      await customerService.deleteCustomer(customerId);
       setMessage('Customer moved to Recycle Bin');
       fetchCustomers();
     } catch (err) {
@@ -183,9 +212,7 @@ function Customers({ goBack }) {
   };
 
   const startEditCustomer = (customer) => {
-    setEditingCustomer({ ...customer });
-    setName(customer.name);
-    setPhone(customer.phone);
+    setEditingCustomer(customer);
   };
 
   const formatAmount = (num) => {
@@ -264,7 +291,7 @@ function Customers({ goBack }) {
         <div style={{
           marginBottom: isMobile ? '24px' : '32px',
           padding: isMobile ? '20px' : '32px',
-          background: 'white',
+
           borderRadius: '20px',
           border: '1px solid #e0e0e0',
           boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
@@ -317,137 +344,13 @@ function Customers({ goBack }) {
         </div>
 
         {/* Add/Edit Form */}
-        <div style={{
-          display: 'flex',
-          gap: isMobile ? '12px' : '16px',
-          flexWrap: 'wrap',
-          marginBottom: isMobile ? '24px' : '32px',
-          flexDirection: isMobile ? 'column' : 'row',
-          backgroundColor: '#fafafa',
-          padding: isMobile ? '16px' : '24px',
-          borderRadius: '20px',
-          border: '1px solid #f0f0f0'
-        }}>
-          <div style={{
-            flex: isMobile ? '1 1 100%' : '1 1 220px',
-            minWidth: isMobile ? 'auto' : '220px'
-          }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#455a64', fontSize: '12px' }}>
-              Customer Name *
-            </label>
-            <input
-              value={editingCustomer ? editingCustomer.name : name}
-              onChange={(e) => {
-                if (editingCustomer) {
-                  setEditingCustomer({ ...editingCustomer, name: e.target.value });
-                } else {
-                  setName(e.target.value);
-                }
-              }}
-              placeholder="Enter customer name"
-              style={{
-                width: '100%',
-                padding: '12px 16px',
-                borderRadius: '12px',
-                border: (editingCustomer && !editingCustomer.name.trim()) ? '2px solid #ef5350' : '1px solid #e0e0e0',
-                outline: 'none',
-                fontSize: '14px',
-                boxSizing: 'border-box',
-                fontWeight: '500'
-              }}
-            />
-          </div>
-          <div style={{
-            flex: isMobile ? '1 1 100%' : '1 1 220px',
-            minWidth: isMobile ? 'auto' : '220px'
-          }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#455a64', fontSize: '12px' }}>
-              Phone (optional)
-            </label>
-            <input
-              value={editingCustomer ? editingCustomer.phone : phone}
-              onChange={(e) => {
-                if (editingCustomer) {
-                  setEditingCustomer({ ...editingCustomer, phone: e.target.value });
-                } else {
-                  setPhone(e.target.value);
-                }
-              }}
-              placeholder="Enter phone number"
-              style={{
-                width: '100%',
-                padding: '12px 16px',
-                borderRadius: '12px',
-                border: '1px solid #e0e0e0',
-                outline: 'none',
-                fontSize: '14px',
-                boxSizing: 'border-box',
-                fontWeight: '500'
-              }}
-            />
-          </div>
-          {editingCustomer ? (
-            <>
-              <button
-                onClick={() => handleUpdateCustomer(editingCustomer.id)}
-                disabled={!editingCustomer.name.trim()}
-                style={{
-                  padding: '12px 24px',
-                  borderRadius: '12px',
-                  border: 'none',
-                  backgroundColor: editingCustomer.name.trim() ? '#43a047' : '#e0e0e0',
-                  color: editingCustomer.name.trim() ? '#fff' : '#9e9e9e',
-                  cursor: editingCustomer.name.trim() ? 'pointer' : 'not-allowed',
-                  fontWeight: '600',
-                  fontSize: '14px',
-                  whiteSpace: 'nowrap',
-                  flex: isMobile ? '1 1 100%' : '0 0 auto',
-                  height: '46px', alignSelf: 'flex-end'
-                }}
-              >
-                Update
-              </button>
-              <button
-                onClick={() => { setEditingCustomer(null); setName(''); setPhone(''); }}
-                style={{
-                  padding: '12px 24px',
-                  borderRadius: '12px',
-                  border: '1px solid #e0e0e0',
-                  backgroundColor: 'white',
-                  color: '#546e7a',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  flex: isMobile ? '1 1 100%' : '0 0 auto',
-                  height: '46px', alignSelf: 'flex-end'
-                }}
-              >
-                Cancel
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={handleAddCustomer}
-              disabled={!name.trim()}
-              style={{
-                padding: '12px 24px',
-                borderRadius: '12px',
-                border: 'none',
-                backgroundColor: name.trim() ? '#43a047' : '#e0e0e0',
-                color: name.trim() ? '#fff' : '#9e9e9e',
-                cursor: name.trim() ? 'pointer' : 'not-allowed',
-                fontWeight: '600',
-                fontSize: '14px',
-                whiteSpace: 'nowrap',
-                flex: isMobile ? '1 1 100%' : '0 0 auto',
-                height: '46px', alignSelf: 'flex-end',
-                boxShadow: name.trim() ? '0 4px 12px rgba(67, 160, 71, 0.2)' : 'none'
-              }}
-            >
-              Add Customer
-            </button>
-          )}
-        </div>
+        <CustomerForm 
+           isMobile={isMobile}
+           editingCustomer={editingCustomer}
+           onAdd={handleAddCustomer}
+           onUpdate={handleUpdateCustomer}
+           onCancel={() => setEditingCustomer(null)}
+        />
 
         {/* Messages */}
         {message && (

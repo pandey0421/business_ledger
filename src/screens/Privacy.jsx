@@ -42,7 +42,7 @@ const Privacy = ({ goBack }) => {
                 </ul>
 
                 <h2 style={{ color: '#2c3e50', marginTop: '25px' }}>3. Data Protection</h2>
-                <p>We implement security measures including Firebase Authentication and encrypted connections to protect your data. We do not sell your data to third parties.</p>
+                <p>We implement security measures including Supabase Authentication and encrypted connections to protect your data. We do not sell your data to third parties.</p>
 
                 <h2 style={{ color: '#2c3e50', marginTop: '25px' }}>4. Contact Us</h2>
                 <p>If you have any questions about this Privacy Policy, please contact us at support@karobarkhata.com.</p>

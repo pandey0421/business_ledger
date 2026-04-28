@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { db, auth } from '../firebase';
-import { collection, getDocs, doc, setDoc, updateDoc } from 'firebase/firestore';
+import { db, syncManager } from '../services/offlineSync';
+import { authService } from '../services/authService';
 import { toast } from 'react-hot-toast';
 
 const DataMigration = ({ goBack }) => {
@@ -10,15 +10,11 @@ const DataMigration = ({ goBack }) => {
 
     const addLog = (msg) => setLogs(prev => [...prev, `${new Date().toLocaleTimeString()}: ${msg}`]);
 
-    const migrateCustomers = async () => {
-        const userId = auth.currentUser?.uid;
-        if (!userId) return;
+    const migrateCustomers = async (userId) => {
+        addLog('Fetching customers from local database...');
+        const customers = await db.customers.where('user_id').equals(userId).toArray();
 
-        addLog('Fetching list from Users Subcollection...');
-        const custSnapshot = await getDocs(collection(db, 'users', userId, 'customers'));
-        const customers = custSnapshot.docs;
-
-        addLog(`Found ${customers.length} customers in your list.`);
+        addLog(`Found ${customers.length} customers.`);
 
         const total = customers.length;
         if (total === 0) {
@@ -28,27 +24,24 @@ const DataMigration = ({ goBack }) => {
 
         let processed = 0;
 
-        for (const customerDoc of customers) {
-            const custData = customerDoc.data();
-            const custId = customerDoc.id;
-
-            if (custData.isDeleted) {
+        for (const cust of customers) {
+            if (cust.is_deleted) {
                 processed++;
                 continue;
             }
 
-            // Ledger is at Root level: customers/{id}/ledger
-            const ledgerSnapshot = await getDocs(collection(db, 'customers', custId, 'ledger'));
+            // Get all ledger entries for this customer from Dexie
+            const ledgerEntries = await db.customer_ledger
+                .where('customer_id').equals(cust.id)
+                .filter(e => !e.is_deleted)
+                .toArray();
 
             let totalBalance = 0;
             let totalSales = 0;
             let totalReceived = 0;
             let lastActivityDate = null;
 
-            ledgerSnapshot.docs.forEach(entryDoc => {
-                const entry = entryDoc.data();
-                if (entry.isDeleted) return;
-
+            ledgerEntries.forEach(entry => {
                 const val = Number(entry.amount) || 0;
                 if (entry.type === 'sale') {
                     totalBalance += val;
@@ -65,49 +58,34 @@ const DataMigration = ({ goBack }) => {
                 }
             });
 
-            // Update ROOT customer doc (Used by Ledger Screen)
-            // USE setDoc with merge:true in case root doc was phantom (missing)
-            // CRITICAL: Include userId so security rules allow reading it!
+            // Update customer record via syncManager
             const updatePayload = {
-                userId, // Ensure ownership is set
-                totalBalance,
-                totalSales,
-                totalReceived,
-                lastActivityDate: lastActivityDate || custData.lastActivityDate || null,
-                migrationStatus: 'balance_fixed_v6'
+                ...cust,
+                total_balance: totalBalance,
+                total_sales: totalSales,
+                total_received: totalReceived,
+                last_activity_date: lastActivityDate || cust.last_activity_date || null,
+                migration_status: 'balance_fixed_v6'
             };
 
             try {
-                // Ensure root document exists!
-                await setDoc(doc(db, 'customers', custId), updatePayload, { merge: true });
+                await syncManager.pushMutation('customers', 'UPDATE', updatePayload);
             } catch (e) {
-                console.warn(`Could not update root customer ${custId}`, e);
-            }
-
-            // Update USER Subcollection doc (Used by List Screen)
-            // UpdateDoc is fine here because we just read it, so we know it exists
-            try {
-                await updateDoc(doc(db, 'users', userId, 'customers', custId), updatePayload);
-            } catch (e) {
-                console.warn(`Could not update subcollection customer ${custId}`, e);
+                console.warn(`Could not update customer ${cust.id}`, e);
             }
 
             processed++;
             const currentPercent = Math.round((processed / total) * 50);
             setProgress(currentPercent);
-            addLog(`Updated ${custData.name}: Sales=${totalSales}, Rcv=${totalReceived}`);
+            addLog(`Updated ${cust.name}: Sales=${totalSales}, Rcv=${totalReceived}`);
         }
     };
 
-    const migrateSuppliers = async () => {
-        const userId = auth.currentUser?.uid;
-        if (!userId) return;
+    const migrateSuppliers = async (userId) => {
+        addLog('Fetching suppliers from local database...');
+        const suppliers = await db.suppliers.where('user_id').equals(userId).toArray();
 
-        addLog('Fetching list from Users Subcollection...');
-        const suppSnapshot = await getDocs(collection(db, 'users', userId, 'suppliers'));
-        const suppliers = suppSnapshot.docs;
-
-        addLog(`Found ${suppliers.length} suppliers in your list.`);
+        addLog(`Found ${suppliers.length} suppliers.`);
 
         const total = suppliers.length;
         if (total === 0) {
@@ -117,20 +95,22 @@ const DataMigration = ({ goBack }) => {
 
         let processed = 0;
 
-        for (const supplierDoc of suppliers) {
-            const suppData = supplierDoc.data();
-            const suppId = supplierDoc.id;
+        for (const supp of suppliers) {
+            if (supp.is_deleted) {
+                processed++;
+                continue;
+            }
 
-            const ledgerSnapshot = await getDocs(collection(db, 'suppliers', suppId, 'ledger'));
+            const ledgerEntries = await db.supplier_ledger
+                .where('supplier_id').equals(supp.id)
+                .filter(e => !e.is_deleted)
+                .toArray();
 
             let totalBalance = 0;
             let totalPurchases = 0;
             let totalPaid = 0;
 
-            ledgerSnapshot.docs.forEach(entryDoc => {
-                const entry = entryDoc.data();
-                if (entry.isDeleted) return;
-
+            ledgerEntries.forEach(entry => {
                 const val = Number(entry.amount) || 0;
                 if (entry.type === 'purchase') {
                     totalBalance += val;
@@ -141,51 +121,49 @@ const DataMigration = ({ goBack }) => {
                 }
             });
 
-            // Update ROOT supplier doc
             const updatePayload = {
-                userId,
-                totalBalance,
-                totalPurchases,
-                totalPaid,
-                migrationStatus: 'balance_fixed_v6'
+                ...supp,
+                total_balance: totalBalance,
+                total_purchases: totalPurchases,
+                total_paid: totalPaid,
+                migration_status: 'balance_fixed_v6'
             };
 
             try {
-                // Ensure root document exists!
-                await setDoc(doc(db, 'suppliers', suppId), updatePayload, { merge: true });
+                await syncManager.pushMutation('suppliers', 'UPDATE', updatePayload);
             } catch (e) {
-                console.warn(`Could not update root supplier ${suppId}`, e);
-            }
-
-            try {
-                await updateDoc(doc(db, 'users', userId, 'suppliers', suppId), updatePayload);
-            } catch (e) {
-                console.warn(`Could not update subcollection supplier ${suppId}`, e);
+                console.warn(`Could not update supplier ${supp.id}`, e);
             }
 
             processed++;
             const currentPercent = 50 + Math.round((processed / total) * 50);
             setProgress(currentPercent);
-            addLog(`Updated ${suppData.name}: Pur=${totalPurchases}, Pd=${totalPaid}`);
+            addLog(`Updated ${supp.name}: Pur=${totalPurchases}, Pd=${totalPaid}`);
         }
     };
 
     const startMigration = async () => {
         if (!window.confirm("This will recalculate balances for ALL customers and suppliers. Continue?")) return;
 
+        const { data: { user } } = await authService.getCurrentUser();
+        if (!user) {
+            toast.error("Not logged in.");
+            return;
+        }
+
         setLoading(true);
         setLogs([]);
         setProgress(0);
 
         try {
-            await migrateCustomers();
-            await migrateSuppliers();
+            await migrateCustomers(user.id);
+            await migrateSuppliers(user.id);
             toast.success("Migration Completed!");
             addLog("DONE. Check your Dashboards.");
         } catch (err) {
             console.error(err);
             addLog(`ERROR: ${err.message}`);
-            toast.error("Fixed failed. See logs.");
+            toast.error("Fix failed. See logs.");
         } finally {
             setLoading(false);
             setProgress(100);
@@ -206,10 +184,10 @@ const DataMigration = ({ goBack }) => {
                 background: 'white', borderRadius: '16px', padding: '32px',
                 boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
             }}>
-                <h1 style={{ marginTop: 0, color: '#1a237e' }}>Data Migration Utility (v5)</h1>
+                <h1 style={{ marginTop: 0, color: '#1a237e' }}>Data Migration Utility (v6)</h1>
                 <p style={{ color: '#546e7a', lineHeight: '1.6' }}>
                     Use this tool to recalculate the <strong>Total Balance</strong> field for all Customers and Suppliers.
-                    This is required after the "Scalable Ledger" update to ensure the main dashboard and ledger headers show the correct amounts.
+                    This reads from your local database and pushes updates via the sync queue.
                 </p>
 
                 <div style={{

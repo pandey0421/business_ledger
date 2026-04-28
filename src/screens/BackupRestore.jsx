@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { db, auth } from '../firebase';
-import { collection, getDocs, doc, setDoc, writeBatch } from 'firebase/firestore';
 import { toast } from 'react-hot-toast';
+import { db, syncManager } from '../services/offlineSync';
+import { authService } from '../services/authService';
 
 const BackupRestore = ({ goBack }) => {
     const [loading, setLoading] = useState(false);
@@ -11,7 +11,9 @@ const BackupRestore = ({ goBack }) => {
 
     // --- EXPORT FUNCTIONALITY ---
     const handleExport = async () => {
-        const userId = auth.currentUser?.uid;
+        const currentUserResponse = await authService.getCurrentUser();
+        const userId = currentUserResponse?.data?.user?.id;
+        
         if (!userId) return toast.error("Not logged in");
 
         if (!window.confirm("Download all data to a JSON file?")) return;
@@ -21,79 +23,28 @@ const BackupRestore = ({ goBack }) => {
         addLog("Starting Export...");
 
         try {
+            addLog("Fetching Data from Local Cache...");
             const masterData = {
-                version: 1,
+                version: 2, // V2 corresponds to Supabase/Dexie relational schema
                 exportedAt: new Date().toISOString(),
                 userId: userId,
                 userProfile: {},
-                customers: [],
-                suppliers: [],
-                expenses: []
+                
+                customers: await db.customers.where('user_id').equals(userId).toArray(),
+                suppliers: await db.suppliers.where('user_id').equals(userId).toArray(),
+                expenses: await db.expenses.where('user_id').equals(userId).toArray(),
+                products: await db.products.where('user_id').equals(userId).toArray(),
+                
+                customer_ledger: await db.customer_ledger.where('user_id').equals(userId).toArray(),
+                supplier_ledger: await db.supplier_ledger.where('user_id').equals(userId).toArray(),
+                expense_ledger: await db.expense_ledger.where('user_id').equals(userId).toArray()
             };
 
-            // 1. User Profile
-            addLog("Fetching User Profile...");
-            // We usually don't store much in 'users/{uid}' other than subcollections, but let's check.
-            // (If you access it in other screens)
-
-            // 2. Customers & Ledgers
-            addLog("Fetching Customers...");
-            const custSnap = await getDocs(collection(db, 'users', userId, 'customers'));
-            for (const cDoc of custSnap.docs) {
-                const cData = cDoc.data();
-                // Fetch Ledger for this customer (Root Collection Pattern: customers/{id}/ledger)
-                const ledgerSnap = await getDocs(collection(db, 'customers', cDoc.id, 'ledger'));
-                const ledgerEntries = ledgerSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-                // Fetch Root Customer Data (to ensure we have the latest totals etc)
-                // Note: The app uses 'users/{uid}/customers' for list, and 'customers/{id}' for details/ledger root.
-                // We should probably export the ROOT customer data as primary.
-
-                masterData.customers.push({
-                    id: cDoc.id,
-                    data: cData, // This is the user-linked data
-                    // We might need to fetch the actual root 'customers/{id}' if it has different data?
-                    // Assuming they satisfy the same schema mostly.
-                    ledger: ledgerEntries
-                });
-            }
             addLog(`Exported ${masterData.customers.length} customers.`);
-
-            // 3. Suppliers & Ledgers
-            addLog("Fetching Suppliers...");
-            const suppSnap = await getDocs(collection(db, 'users', userId, 'suppliers'));
-            for (const sDoc of suppSnap.docs) {
-                const sData = sDoc.data();
-                const ledgerSnap = await getDocs(collection(db, 'suppliers', sDoc.id, 'ledger'));
-                const ledgerEntries = ledgerSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-                masterData.suppliers.push({
-                    id: sDoc.id,
-                    data: sData,
-                    ledger: ledgerEntries
-                });
-            }
             addLog(`Exported ${masterData.suppliers.length} suppliers.`);
-
-            // 4. Expenses
-            addLog("Fetching Expenses (and their ledgers)...");
-            const expSnap = await getDocs(collection(db, 'users', userId, 'expenses'));
-
-            for (const eDoc of expSnap.docs) {
-                const eData = eDoc.data();
-                // Check User Scope first
-                let ledgerRef = collection(db, 'users', userId, 'expenses', eDoc.id, 'ledger');
-                let ledgerSnap = await getDocs(ledgerRef);
-
-                const ledgerEntries = ledgerSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-                masterData.expenses.push({
-                    id: eDoc.id,
-                    data: eData,
-                    ledger: ledgerEntries
-                });
-            }
-            addLog(`Exported ${masterData.expenses.length} expense categories.`);
+            addLog(`Exported ${masterData.expenses.length} expenses.`);
+            addLog(`Exported ${masterData.products.length} products.`);
+            addLog(`Exported ${masterData.customer_ledger.length + masterData.supplier_ledger.length + masterData.expense_ledger.length} total ledger entries.`);
 
             // Trigger Download
             const jsonString = JSON.stringify(masterData, null, 2);
@@ -138,85 +89,81 @@ const BackupRestore = ({ goBack }) => {
     };
 
     const runImport = async (data) => {
-        const userId = auth.currentUser?.uid;
+        const currentUserResponse = await authService.getCurrentUser();
+        const userId = currentUserResponse?.data?.user?.id;
         if (!userId) return toast.error("Not logged in");
 
-        if (!window.confirm(`Ready to import:\n${data.customers.length} Customers\n${data.suppliers.length} Suppliers\n${data.expenses.length} Expenses\n\nThis will overwrite/add data to the CURRENT database.`)) return;
+        if (!window.confirm(`Ready to import data. This will overwrite/add data to the CURRENT database.`)) return;
 
         setLoading(true);
         setLogs([]);
         addLog("Starting Import...");
 
         try {
-            // Helper to batch writes (Limit 500 ops per batch)
-            // Simpler approach for now: sequential awaits or smaller chunks.
-            // We will use setDoc(merge: true) to be safe.
-
-            // 1. Customers
-            for (const cust of data.customers) {
-                addLog(`Importing Customer: ${cust.data.name || cust.id}...`);
-
-                // A. Link to User
-                await setDoc(doc(db, 'users', userId, 'customers', cust.id), {
-                    ...cust.data,
-                    userId // ensure ownership in new DB
-                }, { merge: true });
-
-                // B. Create Root Doc
-                await setDoc(doc(db, 'customers', cust.id), {
-                    ...cust.data,
-                    userId
-                }, { merge: true });
-
-                // C. Ledger Entries
-                const ledgerRef = collection(db, 'customers', cust.id, 'ledger');
-                // We should probably use batch here for speed, but loop is safer for now.
-                for (const entry of cust.ledger) {
-                    await setDoc(doc(ledgerRef, entry.id), entry, { merge: true });
+            if (data.version === 2) {
+                // V2 Direct Import
+                addLog('Importing V2 format...');
+                if (data.customers) {
+                    for (const c of data.customers) await syncManager.pushMutation('customers', 'INSERT', { ...c, user_id: userId });
                 }
-            }
-
-            // 2. Suppliers
-            for (const supp of data.suppliers) {
-                addLog(`Importing Supplier: ${supp.data.name || supp.id}...`);
-
-                await setDoc(doc(db, 'users', userId, 'suppliers', supp.id), {
-                    ...supp.data,
-                    userId
-                }, { merge: true });
-
-                await setDoc(doc(db, 'suppliers', supp.id), {
-                    ...supp.data,
-                    userId
-                }, { merge: true });
-
-                const ledgerRef = collection(db, 'suppliers', supp.id, 'ledger');
-                for (const entry of supp.ledger) {
-                    await setDoc(doc(ledgerRef, entry.id), entry, { merge: true });
+                if (data.suppliers) {
+                    for (const s of data.suppliers) await syncManager.pushMutation('suppliers', 'INSERT', { ...s, user_id: userId });
                 }
-            }
+                if (data.expenses) {
+                    for (const e of data.expenses) await syncManager.pushMutation('expenses', 'INSERT', { ...e, user_id: userId });
+                }
+                if (data.products) {
+                    for (const p of data.products) await syncManager.pushMutation('products', 'INSERT', { ...p, user_id: userId });
+                }
+                
+                if (data.customer_ledger) {
+                    for (const l of data.customer_ledger) await syncManager.pushMutation('customer_ledger', 'INSERT', { ...l, user_id: userId });
+                }
+                if (data.supplier_ledger) {
+                    for (const l of data.supplier_ledger) await syncManager.pushMutation('supplier_ledger', 'INSERT', { ...l, user_id: userId });
+                }
+                if (data.expense_ledger) {
+                    for (const l of data.expense_ledger) await syncManager.pushMutation('expense_ledger', 'INSERT', { ...l, user_id: userId });
+                }
+            } else {
+                // V1 (Legacy Nested) to V2 mapping
+                addLog('Upgrading V1 Backup format to V2 schema...');
+                
+                // 1. Customers
+                for (const cust of data.customers || []) {
+                    const cData = { id: cust.id, ...cust.data, user_id: userId };
+                    await syncManager.pushMutation('customers', 'INSERT', cData);
 
-            // 3. Expenses
-            for (const exp of data.expenses) {
-                const catName = exp.data ? exp.data.name : exp.name; // Handle potential structure variance
-                addLog(`Importing Expense: ${catName || 'Category'}...`);
+                    for (const entry of cust.ledger || []) {
+                        const lData = { id: entry.id, ...entry, customer_id: cust.id, user_id: userId };
+                        await syncManager.pushMutation('customer_ledger', 'INSERT', lData);
+                    }
+                }
 
-                // Create Category Wrapper
-                await setDoc(doc(db, 'users', userId, 'expenses', exp.id), {
-                    ...(exp.data || exp), // Fallback if old export format
-                    userId
-                }, { merge: true });
+                // 2. Suppliers
+                for (const supp of data.suppliers || []) {
+                    const sData = { id: supp.id, ...supp.data, user_id: userId };
+                    await syncManager.pushMutation('suppliers', 'INSERT', sData);
 
-                // Import Ledger
-                if (exp.ledger && exp.ledger.length > 0) {
-                    const ledgerRef = collection(db, 'users', userId, 'expenses', exp.id, 'ledger');
-                    for (const entry of exp.ledger) {
-                        await setDoc(doc(ledgerRef, entry.id), entry, { merge: true });
+                    for (const entry of supp.ledger || []) {
+                        const lData = { id: entry.id, ...entry, supplier_id: supp.id, user_id: userId };
+                        await syncManager.pushMutation('supplier_ledger', 'INSERT', lData);
+                    }
+                }
+
+                // 3. Expenses
+                for (const exp of data.expenses || []) {
+                    const eData = { id: exp.id, ...(exp.data || exp), user_id: userId };
+                    await syncManager.pushMutation('expenses', 'INSERT', eData);
+
+                    for (const entry of exp.ledger || []) {
+                        const lData = { id: entry.id, ...entry, expense_id: exp.id, user_id: userId };
+                        await syncManager.pushMutation('expense_ledger', 'INSERT', lData);
                     }
                 }
             }
 
-            addLog("Import Finished Successfully!");
+            addLog("Import Finished Successfully! Your data is queued to sync with Supabase.");
             toast.success("Data Imported!");
 
         } catch (err) {

@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { collection, addDoc, query, orderBy, limit, startAfter, getDocs, getCountFromServer, serverTimestamp, doc, updateDoc, increment, onSnapshot, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
-import { db, auth } from '../firebase';
+import { expenseService } from '../services/expenseService';
 import { exportLedgerToPDF, formatIndianCurrency } from '../utils/pdfExport';
 
 const ExpenseLedger = ({ expense, onBack }) => {
@@ -42,49 +41,29 @@ const ExpenseLedger = ({ expense, onBack }) => {
     }
   };
 
-  // 1. Listen for Realtime Total Updates
-  useEffect(() => {
-    if (!expense?.id || !expense?.userId) return;
-    const unsub = onSnapshot(doc(db, 'users', expense.userId, 'expenses', expense.id), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setRealtimeTotal(data.totalAmount || 0);
-      }
-    });
-    return () => unsub();
-  }, [expense?.id, expense?.userId]);
-
   const displayTotal = userInteractedTotal !== null ? userInteractedTotal : realtimeTotal;
 
   // 2. Initial Ledger Fetch (Pagination)
   useEffect(() => {
     const initLedger = async () => {
       setLoading(true);
-      if (!expense?.id || !expense?.userId) {
-        console.warn("Missing ID or UserID for ledger init");
+      if (!expense?.id) {
+        console.warn("Missing ID for ledger init");
         setLoading(false);
         return;
       }
       try {
-        const ledgerRef = collection(db, 'users', expense.userId, 'expenses', expense.id, 'ledger');
-        // Get Count
-        const countSnap = await getCountFromServer(ledgerRef);
-        setTotalTransactionCount(countSnap.data().count);
+        const count = await expenseService.getExpenseLedgerCount(expense.id);
+        setTotalTransactionCount(count);
 
-        // Get First Page
-        const q = query(
-          ledgerRef,
-          orderBy('date', 'desc'),
+        const fetchedEntries = await expenseService.getExpenseLedger(expense.id);
+        setEntries(fetchedEntries.slice(0, 10));
 
-          limit(10)
-        );
-        const snap = await getDocs(q);
-        const fetchedEntries = snap.docs
-          .filter(d => !d.data().isDeleted)
-          .map(d => ({ id: d.id, ...d.data() }));
+        let sum = 0;
+        fetchedEntries.forEach(e => sum += Number(e.amount) || 0);
+        setRealtimeTotal(sum);
+        setUserInteractedTotal(null);
 
-        setEntries(fetchedEntries);
-        setLastVisible(snap.docs[snap.docs.length - 1]);
       } catch (err) {
         console.error("Error fetching ledger:", err);
       } finally {
@@ -92,41 +71,27 @@ const ExpenseLedger = ({ expense, onBack }) => {
       }
     };
     initLedger();
-  }, [expense?.id, expense?.userId]);
+  }, [expense?.id]);
 
   // 3. Robust Recalculate (Self-Healing)
   const recalculateTotals = async (isManual = false) => {
-    if (!expense?.id || !expense?.userId) return;
-    if (!isManual && (loading || totalTransactionCount === 0)) return;
-    if (!isManual && realtimeTotal > 0 && !userInteractedTotal) return; // Skip if looks good
-
+    if (!expense?.id) return;
     if (isManual) setMessage('Recalculating totals...');
-    console.log(`Starting ${isManual ? 'MANUAL' : 'Auto'} Recalculation...`);
-
+    
     try {
-      const snap = await getDocs(collection(db, 'users', expense.userId, 'expenses', expense.id, 'ledger'));
+      const allEntries = await expenseService.getExpenseLedger(expense.id);
       let sum = 0;
-      let lastDate = null;
-      snap.docs.forEach(d => {
-        const da = d.data();
-        if (!da.isDeleted) {
-          sum += Number(da.amount) || 0;
-          if (da.date && (!lastDate || da.date > lastDate)) lastDate = da.date;
-        }
+      allEntries.forEach(d => {
+        sum += Number(d.amount) || 0;
       });
 
-      setUserInteractedTotal(sum);
-
-      // Persist
-      const payload = {
-        totalAmount: sum,
-        lastActivityDate: lastDate,
-        updatedAt: serverTimestamp()
-      };
-
-      await updateDoc(doc(db, 'users', expense.userId, 'expenses', expense.id), payload);
-
-      if (isManual) setMessage('Totals updated successfully');
+      await expenseService.updateExpenseCategory(expense.id, expense.name); // Updates updated_at at least
+      
+      setRealtimeTotal(sum);
+      if (isManual) {
+        setMessage('Totals updated successfully');
+        setTimeout(() => setMessage(''), 3000);
+      }
 
     } catch (err) {
       console.error("Recalc failed", err);
@@ -134,104 +99,18 @@ const ExpenseLedger = ({ expense, onBack }) => {
     }
   };
 
-  useEffect(() => {
-    const timer = setTimeout(() => recalculateTotals(false), 2000);
-    return () => clearTimeout(timer);
-  }, [expense?.id, expense?.userId, loading, totalTransactionCount]);
-
-  const [legacyCount, setLegacyCount] = useState(0);
-  const [migrating, setMigrating] = useState(false);
-
   // 4. Load More
   const fetchMoreEntries = async () => {
-    if (!lastVisible || !expense?.userId) return;
+    if (entries.length >= totalTransactionCount) return;
     setLoadingMore(true);
     try {
-      const q = query(
-        collection(db, 'users', expense.userId, 'expenses', expense.id, 'ledger'),
-        orderBy('date', 'desc'),
-        startAfter(lastVisible),
-        limit(10)
-      );
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const newEntries = snap.docs
-          .filter(d => !d.data().isDeleted)
-          .map(d => ({ id: d.id, ...d.data() }));
-        setEntries(prev => [...prev, ...newEntries]);
-        setLastVisible(snap.docs[snap.docs.length - 1]);
-      }
+      const allEntries = await expenseService.getExpenseLedger(expense.id);
+      const nextBatch = allEntries.slice(entries.length, entries.length + 10);
+      setEntries(prev => [...prev, ...nextBatch]);
     } catch (err) {
       console.error(err);
     } finally {
       setLoadingMore(false);
-    }
-  };
-
-  // CHECK LEGACY DATA (From Root Collection)
-  useEffect(() => {
-    const checkLegacy = async () => {
-      if (!expense?.id || entries.length > 0) return;
-      try {
-        const legacyRef = collection(db, 'expenses', expense.id, 'ledger');
-        const countSnap = await getCountFromServer(legacyRef);
-        setLegacyCount(countSnap.data().count);
-      } catch (e) {
-        console.log("Legacy check failed", e);
-      }
-    };
-    if (!loading && entries.length === 0) {
-      checkLegacy();
-    }
-  }, [expense?.id, entries.length, loading]);
-
-  const migrateLegacyData = async () => {
-    if (!expense?.id || !expense?.userId) return;
-    setMigrating(true);
-    setMessage("Migrating data...");
-
-    try {
-      const legacyRef = collection(db, 'expenses', expense.id, 'ledger');
-      const snap = await getDocs(legacyRef);
-      const newLedgerRef = collection(db, 'users', expense.userId, 'expenses', expense.id, 'ledger');
-
-      const batch = writeBatch(db);
-      let count = 0;
-      let totalSum = 0;
-      let lastDate = null;
-
-      snap.docs.forEach(d => {
-        const data = d.data();
-        const amount = Number(data.amount) || 0;
-        totalSum += amount;
-
-        if (data.date && (!lastDate || data.date > lastDate)) lastDate = data.date;
-
-        const newDocRef = doc(newLedgerRef); // New ID
-        batch.set(newDocRef, { ...data, migratedAt: serverTimestamp() });
-        batch.delete(doc(db, 'expenses', expense.id, 'ledger', d.id)); // Delete old
-        count++;
-      });
-
-      // Update Parent Total immediately
-      batch.update(doc(db, 'users', expense.userId, 'expenses', expense.id), {
-        totalAmount: totalSum,
-        lastActivityDate: lastDate || serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-
-      await batch.commit();
-      setMessage(`Successfully migrated ${count} entries!`);
-      setLegacyCount(0);
-
-      // Refresh
-      window.location.reload();
-
-    } catch (e) {
-      console.error("Migration failed", e);
-      setMessage("Migration failed: " + e.message);
-    } finally {
-      setMigrating(false);
     }
   };
 
@@ -282,56 +161,36 @@ const ExpenseLedger = ({ expense, onBack }) => {
     if (isNaN(val)) return;
 
     try {
+      const entryId = editingEntry ? editingEntry.id : crypto.randomUUID();
+      const entryData = { id: entryId, amount: val, date, note };
+
       if (editingEntry) {
-        // Edit: Calculate difference
-        const oldVal = Number(editingEntry.amount);
-        const diff = val - oldVal;
-
-        await updateDoc(
-          doc(db, 'users', expense.userId, 'expenses', expense.id, 'ledger', editingEntry.id),
-          { amount: val, date, note }
-        );
-
-        await updateDoc(doc(db, 'users', expense.userId, 'expenses', expense.id), {
-          totalAmount: increment(diff),
-          lastActivityDate: date,
-          updatedAt: serverTimestamp()
-        });
-
-        // Optimistic UI
-        setEntries(prev => prev.map(e => e.id === editingEntry.id ? { ...e, amount: val, date, note } : e));
-        if (userInteractedTotal !== null || realtimeTotal !== undefined) {
-          setUserInteractedTotal((userInteractedTotal ?? realtimeTotal) + diff);
-        }
-
-        setMessage('Entry updated');
+        await expenseService.updateLedgerEntry(entryId, entryData);
       } else {
-        // Add
-        const newRef = await addDoc(collection(db, 'users', expense.userId, 'expenses', expense.id, 'ledger'), {
-          amount: val,
-          date,
-          note,
-          createdAt: serverTimestamp()
-        });
-
-        await updateDoc(doc(db, 'users', expense.userId, 'expenses', expense.id), {
-          totalAmount: increment(val),
-          lastActivityDate: date,
-          updatedAt: serverTimestamp()
-        });
-
-        const newEntry = { id: newRef.id, amount: val, date, note, createdAt: { seconds: Date.now() / 1000 } };
-        setEntries(prev => [newEntry, ...prev]);
-        setTotalTransactionCount(prev => prev + 1);
-
-        if (userInteractedTotal !== null || realtimeTotal !== undefined) {
-          setUserInteractedTotal((userInteractedTotal ?? realtimeTotal) + val);
-        }
-
-        setMessage('Entry added');
+        await expenseService.addLedgerEntry(expense.id, entryData);
       }
+
+      // Pure Optimistic UI Update without re-fetching
+      let sum = realtimeTotal;
+      let newEntries = [...entries];
+      
+      if (editingEntry) {
+        sum = sum - (Number(editingEntry.amount) || 0) + val;
+        newEntries = newEntries.map(e => e.id === entryId ? entryData : e);
+      } else {
+        sum += val;
+        newEntries = [entryData, ...newEntries];
+      }
+      
+      // Keep sorted by date desc
+      newEntries.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      setEntries(newEntries.slice(0, entries.length + (editingEntry ? 0 : 1)));
+      setTotalTransactionCount(prev => prev + (editingEntry ? 0 : 1));
+      setRealtimeTotal(sum);
+      
+      setMessage(editingEntry ? 'Entry updated' : 'Entry added');
       resetForm();
-      setTimeout(() => setUserInteractedTotal(null), 2000); // Reset optimistic after delay
 
     } catch (err) {
       console.error(err);
@@ -353,28 +212,17 @@ const ExpenseLedger = ({ expense, onBack }) => {
     const entryToDelete = entries.find(e => e.id === entryId);
     if (!entryToDelete) return;
 
-    const val = Number(entryToDelete.amount);
-
     try {
-      await updateDoc(doc(db, 'users', expense.userId, 'expenses', expense.id, 'ledger', entryId), {
-        isDeleted: true,
-        deletedAt: serverTimestamp()
-      });
+      await expenseService.deleteLedgerEntry(expense.id, entryId);
 
-      await updateDoc(doc(db, 'users', expense.userId, 'expenses', expense.id), {
-        totalAmount: increment(-val),
-        updatedAt: serverTimestamp() // Note: lastActivityDate might be tricky to revert perfectly, leaving as is or current
-      });
-
+      // Pure Optimistic UI Update without re-fetching
+      let sum = realtimeTotal - (Number(entryToDelete.amount) || 0);
+      
       setEntries(prev => prev.filter(e => e.id !== entryId));
       setTotalTransactionCount(prev => prev - 1);
-
-      if (userInteractedTotal !== null || realtimeTotal !== undefined) {
-        setUserInteractedTotal((userInteractedTotal ?? realtimeTotal) - val);
-      }
+      setRealtimeTotal(sum);
 
       setMessage('Entry deleted');
-      setTimeout(() => setUserInteractedTotal(null), 2000);
     } catch (err) {
       console.error(err);
       setMessage('Failed to delete entry');
@@ -393,7 +241,10 @@ const ExpenseLedger = ({ expense, onBack }) => {
     setMessage('');
     try {
       // Filter entries by date range
-      const filteredEntries = entries.filter((entry) => {
+      const allRaw = await expenseService.getExpenseLedger(expense.id);
+      const allEntries = allRaw.slice().reverse().map(da => ({ ...da, amount: Number(da.amount) || 0 }));
+
+      const filteredEntries = allEntries.filter((entry) => {
         const entryDate = entry.date;
         const startDate = exportStart;
         const endDate = exportEnd || '9999-12-31';
@@ -407,7 +258,7 @@ const ExpenseLedger = ({ expense, onBack }) => {
       }
 
       // Calculate opening balance (entries BEFORE start date)
-      const openingBalance = entries
+      const openingBalance = allEntries
         .filter((e) => e.date < exportStart)
         .reduce((sum, e) => sum + e.amount, 0);
 
@@ -755,22 +606,6 @@ const ExpenseLedger = ({ expense, onBack }) => {
         ) : entries.length === 0 ? (
           <div style={{ color: '#78909c', textAlign: 'center', padding: '60px', fontSize: '14px', background: '#f9fafb', borderRadius: '12px' }}>
             <p>No expense entries yet. Add your first expense above.</p>
-            {legacyCount > 0 && (
-              <div style={{ marginTop: '20px', padding: '16px', background: '#fff3e0', borderRadius: '12px', border: '1px solid #ffe0b2' }}>
-                <p style={{ color: '#e65100', fontWeight: '600', marginBottom: '8px' }}>
-                  ⚠️ Found {legacyCount} entries from previous version.
-                </p>
-                <button
-                  onClick={migrateLegacyData}
-                  disabled={migrating}
-                  style={{
-                    padding: '8px 16px', borderRadius: '8px', border: 'none', background: '#e65100', color: 'white', fontWeight: 'bold', cursor: 'pointer'
-                  }}
-                >
-                  {migrating ? 'Migrating...' : 'Migrate Data Now'}
-                </button>
-              </div>
-            )}
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>

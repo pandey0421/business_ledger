@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import KhaltiCheckout from 'khalti-checkout-web';
-import { db, auth } from '../firebase';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { supabase } from '../supabaseClient';
+import { authService } from '../services/authService';
 import toast from 'react-hot-toast';
 
 const Subscription = ({ onSuccess }) => {
@@ -11,11 +11,17 @@ const Subscription = ({ onSuccess }) => {
     // Load current subscription
     useEffect(() => {
         const checkSub = async () => {
-            if (!auth.currentUser) return;
-            const ref = doc(db, 'users', auth.currentUser.uid);
-            const snap = await getDoc(ref);
-            if (snap.exists() && snap.data().subscriptionExpiry) {
-                setExpiry(snap.data().subscriptionExpiry.toDate());
+            const { data: { user } } = await authService.getCurrentUser();
+            if (!user) return;
+
+            const { data, error } = await supabase
+                .from('user_subscriptions')
+                .select('subscription_expiry')
+                .eq('user_id', user.id)
+                .maybeSingle();
+
+            if (!error && data && data.subscription_expiry) {
+                setExpiry(new Date(data.subscription_expiry));
             }
         };
         checkSub();
@@ -52,18 +58,26 @@ const Subscription = ({ onSuccess }) => {
             // In a real app, verify 'payload.token' on your SERVER before updating DB
             // For this MVP, we update directly (Client-side verification is insecure but functional for demo)
 
+            const { data: { user } } = await authService.getCurrentUser();
+            if (!user) throw new Error("User not authenticated");
+
             const futureDate = new Date();
             futureDate.setFullYear(futureDate.getFullYear() + 1);
 
-            await setDoc(doc(db, 'users', auth.currentUser.uid), {
-                subscriptionStatus: 'active',
-                subscriptionExpiry: futureDate,
-                lastPaymentId: payload.idx,
-                verificationToken: payload.token, // STORE TOKEN for API verification
-                paymentDetails: payload, // Store full payload for audit
-                lastPaymentDate: serverTimestamp(),
-                email: auth.currentUser.email
-            }, { merge: true });
+            const { error } = await supabase
+                .from('user_subscriptions')
+                .upsert({
+                    user_id: user.id,
+                    subscription_status: 'active',
+                    subscription_expiry: futureDate.toISOString(),
+                    last_payment_id: payload.idx,
+                    verification_token: payload.token,
+                    payment_details: payload,
+                    last_payment_date: new Date().toISOString(),
+                    email: user.email
+                }, { onConflict: 'user_id' });
+
+            if (error) throw error;
 
             toast.success("Subscription Activated! Welcome to Pro.");
             onSuccess(); // Redirect to Dashboard

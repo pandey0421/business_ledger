@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { db, auth } from '../firebase';
-import { collection, getDocs, doc, updateDoc, deleteDoc, query, where, getDoc } from 'firebase/firestore';
+import { db, syncManager } from '../services/offlineSync';
+import { authService } from '../services/authService';
 import { Trash2, RefreshCcw, AlertTriangle, FileText, User, ShoppingBag, CreditCard, Menu, X } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
@@ -12,6 +12,7 @@ const RecycleBin = ({ goBack }) => {
     const [message, setMessage] = useState('');
     const [isMobile, setIsMobile] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [userId, setUserId] = useState(null);
 
     useEffect(() => {
         const checkMobile = () => setIsMobile(window.innerWidth <= 768);
@@ -20,9 +21,14 @@ const RecycleBin = ({ goBack }) => {
         return () => window.removeEventListener('resize', checkMobile);
     }, []);
 
-    // ... (keep existing fetch and useEffect logic) ...
-
-    const userId = auth.currentUser?.uid;
+    // Get current user
+    useEffect(() => {
+        const getUser = async () => {
+            const { data: { user } } = await authService.getCurrentUser();
+            setUserId(user?.id || null);
+        };
+        getUser();
+    }, []);
 
     // AUTO CLEANUP: Delete items older than 7 days
     useEffect(() => {
@@ -30,24 +36,21 @@ const RecycleBin = ({ goBack }) => {
             if (!userId) return;
             const sevenDaysAgo = new Date();
             sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+            const cutoffTime = sevenDaysAgo.getTime();
 
             console.log("Running auto-cleanup for items older than:", sevenDaysAgo);
 
-            // Helper to clean collection
-            const cleanCollection = async (collName, isSubCollection = false, parentColl = null) => {
+            const cleanTable = async (tableName) => {
                 try {
-                    if (!isSubCollection) {
-                        const q = query(
-                            collection(db, 'users', userId, collName),
-                            where('isDeleted', '==', true),
-                            where('deletedAt', '<=', sevenDaysAgo)
-                        );
-                        const snapshot = await getDocs(q);
-                        if (!snapshot.empty) {
-                            console.log(`Found ${snapshot.size} old ${collName} to delete.`);
-                            snapshot.docs.forEach(async (d) => {
-                                await deleteDoc(doc(db, 'users', userId, collName, d.id));
-                            });
+                    const allDeleted = await db[tableName]
+                        .where('user_id').equals(userId)
+                        .filter(item => item.is_deleted === true && item.deleted_at && new Date(item.deleted_at).getTime() <= cutoffTime)
+                        .toArray();
+
+                    if (allDeleted.length > 0) {
+                        console.log(`Found ${allDeleted.length} old ${tableName} to permanently remove.`);
+                        for (const item of allDeleted) {
+                            await syncManager.pushMutation(tableName, 'DELETE', { ...item, is_deleted: true });
                         }
                     }
                 } catch (e) {
@@ -55,9 +58,9 @@ const RecycleBin = ({ goBack }) => {
                 }
             };
 
-            await cleanCollection('customers');
-            await cleanCollection('suppliers');
-            await cleanCollection('expenses');
+            await cleanTable('customers');
+            await cleanTable('suppliers');
+            await cleanTable('expenses');
         };
 
         performAutoCleanup();
@@ -74,42 +77,54 @@ const RecycleBin = ({ goBack }) => {
             let fetchedItems = [];
 
             if (['customers', 'suppliers', 'expenses'].includes(activeTab)) {
-                // Fetch Deleted PARENTS
-                const q = query(
-                    collection(db, 'users', userId, activeTab),
-                    where('isDeleted', '==', true)
-                );
-                const snapshot = await getDocs(q);
-                fetchedItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'parent' }));
+                // Fetch Deleted PARENTS from Dexie
+                fetchedItems = await db[activeTab]
+                    .where('user_id').equals(userId)
+                    .filter(item => item.is_deleted === true)
+                    .toArray();
+
+                fetchedItems = fetchedItems.map(item => ({ ...item, type: 'parent' }));
 
             } else {
                 // Fetch Deleted ENTRIES (Transactions)
-                let parentColl = '';
-                if (activeTab === 'customer_entries') parentColl = 'customers';
-                else if (activeTab === 'supplier_entries') parentColl = 'suppliers';
-                else if (activeTab === 'expense_entries') parentColl = 'expenses';
+                let parentTable = '';
+                let ledgerTable = '';
+                let parentKey = '';
 
-                // 1. Get Parents
-                const parentSnapshot = await getDocs(collection(db, 'users', userId, parentColl));
-                const parents = parentSnapshot.docs.map(d => ({ id: d.id, name: d.data().name }));
+                if (activeTab === 'customer_entries') {
+                    parentTable = 'customers';
+                    ledgerTable = 'customer_ledger';
+                    parentKey = 'customer_id';
+                } else if (activeTab === 'supplier_entries') {
+                    parentTable = 'suppliers';
+                    ledgerTable = 'supplier_ledger';
+                    parentKey = 'supplier_id';
+                } else if (activeTab === 'expense_entries') {
+                    parentTable = 'expenses';
+                    ledgerTable = 'expense_ledger';
+                    parentKey = 'expense_id';
+                }
 
-                // 2. Iterate and fetch deleted ledger entries
-                const promises = parents.map(async (p) => {
-                    const ledgerRef = collection(db, parentColl, p.id, 'ledger');
-                    const qLeadger = query(ledgerRef, where('isDeleted', '==', true));
-                    const snap = await getDocs(qLeadger);
-                    return snap.docs.map(d => ({
-                        id: d.id,
-                        ...d.data(),
-                        parentId: p.id,
-                        parentName: p.name || d.data().parentName || 'Unknown',
-                        type: 'entry',
-                        collName: parentColl
-                    }));
-                });
+                // Get all parents for name lookup
+                const parents = await db[parentTable]
+                    .where('user_id').equals(userId)
+                    .toArray();
+                const parentMap = {};
+                parents.forEach(p => { parentMap[p.id] = p.name; });
 
-                const results = await Promise.all(promises);
-                fetchedItems = results.flat();
+                // Get deleted ledger entries
+                const deletedEntries = await db[ledgerTable]
+                    .where('user_id').equals(userId)
+                    .filter(item => item.is_deleted === true)
+                    .toArray();
+
+                fetchedItems = deletedEntries.map(entry => ({
+                    ...entry,
+                    parentId: entry[parentKey],
+                    parentName: parentMap[entry[parentKey]] || 'Unknown',
+                    type: 'entry',
+                    ledgerTable: ledgerTable
+                }));
             }
 
             setItems(fetchedItems);
@@ -128,18 +143,15 @@ const RecycleBin = ({ goBack }) => {
     const handleRestore = async (item) => {
         if (!userId) return;
         try {
-            if (item.type === 'parent') {
-                const collectionName = activeTab;
-                await updateDoc(doc(db, 'users', userId, collectionName, item.id), {
-                    isDeleted: false,
-                    deletedAt: null
-                });
-            } else {
-                await updateDoc(doc(db, item.collName, item.parentId, 'ledger', item.id), {
-                    isDeleted: false,
-                    deletedAt: null
-                });
-            }
+            const tableName = item.type === 'parent' ? activeTab : item.ledgerTable;
+            const restored = { ...item, is_deleted: false, deleted_at: null };
+            // Clean up UI-only keys before persisting
+            delete restored.type;
+            delete restored.parentId;
+            delete restored.parentName;
+            delete restored.ledgerTable;
+
+            await syncManager.pushMutation(tableName, 'UPDATE', restored);
 
             toast.success("Restored successfully!");
             setItems(items.filter(i => i.id !== item.id));
@@ -154,23 +166,35 @@ const RecycleBin = ({ goBack }) => {
 
         try {
             if (item.type === 'parent') {
-                const collectionName = activeTab;
+                const tableName = activeTab;
+                let ledgerTable = '';
+                let parentKey = '';
 
-                const userLedgerRef = collection(db, 'users', userId, collectionName, item.id, 'ledger');
-                const userLedgerSnap = await getDocs(userLedgerRef);
-                await Promise.all(userLedgerSnap.docs.map(d =>
-                    deleteDoc(doc(db, 'users', userId, collectionName, item.id, 'ledger', d.id))
-                ));
+                if (tableName === 'customers') { ledgerTable = 'customer_ledger'; parentKey = 'customer_id'; }
+                else if (tableName === 'suppliers') { ledgerTable = 'supplier_ledger'; parentKey = 'supplier_id'; }
+                else if (tableName === 'expenses') { ledgerTable = 'expense_ledger'; parentKey = 'expense_id'; }
 
-                const globalLedgerRef = collection(db, collectionName, item.id, 'ledger');
-                const globalLedgerSnap = await getDocs(globalLedgerRef);
-                await Promise.all(globalLedgerSnap.docs.map(d =>
-                    deleteDoc(doc(db, collectionName, item.id, 'ledger', d.id))
-                ));
+                // Delete associated ledger entries first
+                if (ledgerTable) {
+                    const childEntries = await db[ledgerTable]
+                        .where(parentKey).equals(item.id)
+                        .toArray();
 
-                await deleteDoc(doc(db, 'users', userId, collectionName, item.id));
+                    for (const child of childEntries) {
+                        await syncManager.pushMutation(ledgerTable, 'DELETE', { ...child, is_deleted: true });
+                    }
+                }
+
+                // Delete the parent
+                await syncManager.pushMutation(tableName, 'DELETE', { ...item, is_deleted: true, type: undefined });
             } else {
-                await deleteDoc(doc(db, item.collName, item.parentId, 'ledger', item.id));
+                // Delete a single entry
+                const cleaned = { ...item };
+                delete cleaned.type;
+                delete cleaned.parentId;
+                delete cleaned.parentName;
+                delete cleaned.ledgerTable;
+                await syncManager.pushMutation(item.ledgerTable, 'DELETE', { ...cleaned, is_deleted: true });
             }
 
             toast.success("Permanently deleted.");
@@ -353,7 +377,7 @@ const RecycleBin = ({ goBack }) => {
                                         )}
                                     </div>
                                     <span style={{ fontSize: '11px', color: '#ef5350', background: '#ffebee', padding: '4px 8px', borderRadius: '4px', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                                        {item.deletedAt?.seconds ? new Date(item.deletedAt.seconds * 1000).toLocaleDateString() : 'Unknown Date'}
+                                        {item.deleted_at ? new Date(item.deleted_at).toLocaleDateString() : 'Unknown Date'}
                                     </span>
                                 </div>
 

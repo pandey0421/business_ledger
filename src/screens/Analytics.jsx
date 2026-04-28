@@ -1,33 +1,31 @@
-import React, { useState, useEffect } from 'react';
-import { collection, getDocs, query, where, limit, collectionGroup } from 'firebase/firestore';
-import { db, auth } from '../firebase';
+import React, { useState, useEffect, useMemo } from 'react';
+import { analyticsService } from '../services/analyticsService';
+import { authService } from '../services/authService';
 import NepaliDate from 'nepali-date-converter';
 import {
     LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
     XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
-import { motion } from 'framer-motion';
+
 import { Download, ArrowUpRight, ArrowDownRight, Wallet, Users, ShoppingBag, Filter, ArrowLeft, DollarSign, TrendingUp, CreditCard, ShoppingCart, Package } from 'lucide-react';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 
 // --- Helper Components ---
 
 const Card = ({ children, className = "", style = {} }) => (
-    <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
+    <div
         style={{
             background: 'white', borderRadius: '16px', padding: '20px',
             boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1px solid #f0f0f0',
             width: '100%', boxSizing: 'border-box',
+            animation: 'cardFadeIn 0.3s ease-out',
             ...style
         }}
         className={className}
     >
         {children}
-    </motion.div>
+    </div>
 );
+
 
 const KPICard = ({ title, value, subtext, color, icon: Icon, trend }) => (
     <Card style={{ background: `linear-gradient(135deg, ${color[0]}, ${color[1]})`, color: 'white', border: 'none' }}>
@@ -69,24 +67,17 @@ const Analytics = ({ goBack, user }) => {
         end: ''
     });
 
-    const [data, setData] = useState({
-        sales: 0,
-        purchases: 0,
-        collected: 0,
-        receivables: 0,
-        payables: 0,
-        netProfit: 0,
-        expenses: 0,
-        stockValue: 0, // NEW
-        grossProfit: 0, // NEW Field
-        monthlyData: [],
-        pieData: [],
-        topEntities: [],
-        topProducts: [], // NEW
-        topCustomerMargins: [] // NEW
-    });
+    const [rawData, setRawData] = useState(null);
 
-    const userId = user?.uid || auth.currentUser?.uid;
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+    useEffect(() => {
+        const checkAuth = async () => {
+            const u = (await authService.getCurrentUser()).data.user;
+            if (u) setIsAuthenticated(true);
+        };
+        checkAuth();
+    }, []);
     const currentYearBS = new NepaliDate().getYear();
 
     useEffect(() => {
@@ -138,302 +129,223 @@ const Analytics = ({ goBack, user }) => {
     const formatCurrency = (amount) => "Rs. " + new Intl.NumberFormat('en-IN').format(Math.round(amount));
 
     useEffect(() => {
-        if (!userId) return;
-        fetchData();
-    }, [userId, appliedFilter]);
-
-    const fetchData = async () => {
-        setLoading(true);
-        try {
-            const listDocs = async (coll) => {
-                const names = [coll];
-                if (coll === 'customers') names.push('Customers', 'clients', 'parties');
-                if (coll === 'suppliers') names.push('Suppliers', 'vendors');
-
-                for (const name of names) {
-                    // 1. Try User Scope
-                    try {
-                        const userRef = collection(db, 'users', userId, name);
-                        const userSnap = await getDocs(userRef);
-                        if (!userSnap.empty) {
-                            console.log(`Found ${name} in User Scope`);
-                            return userSnap.docs
-                                .map(d => ({ id: d.id, ...d.data() }))
-                                .filter(d => !d.isDeleted); // Filter Deleted Entities
-                        }
-                    } catch (e) { console.warn(`Error fetching ${name} (User):`, e); }
-
-                    // 2. Try Root Scope (Legacy/Fallback)
-                    try {
-                        const rootRef = collection(db, name);
-                        const rootSnap = await getDocs(rootRef);
-                        if (!rootSnap.empty) {
-                            console.log(`Found ${name} in Root Scope`);
-                            return rootSnap.docs
-                                .map(d => ({ id: d.id, ...d.data() }))
-                                .filter(d => !d.isDeleted); // Filter Deleted Entities
-                        }
-                    } catch (e) { console.warn(`Error fetching ${name} (Root):`, e); }
-                }
-                return [];
-            };
-
-            // 3. Helper: Fetch Ledger (Cross-Scope)
-            const fetchLedger = async (coll, id) => {
-                let docs = [];
-
-                // 1. Try USER Scope (Preferred / New Architecture)
-                try {
-                    const userRef = collection(db, 'users', userId, coll, id, 'ledger');
-                    const snap = await getDocs(userRef);
-                    if (!snap.empty) {
-                        docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                    }
-                } catch (e) { }
-
-                // 2. Try ROOT Scope (Legacy Fallback)
-                if (docs.length === 0) {
-                    try {
-                        const rootRef = collection(db, coll, id, 'ledger');
-                        const snap = await getDocs(rootRef);
-                        if (!snap.empty) {
-                            docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                        }
-                    } catch (e) { }
-                }
-
-                // 3. Parse Dates
-                return docs
-                    .filter(d => !d.isDeleted) // Filter Deleted Transactions
-                    .map(data => {
-                        let date = data.date;
-                        if (!date) {
-                            try {
-                                if (data.createdAt?.toDate) date = data.createdAt.toDate().toISOString().split('T')[0];
-                                else if (data.createdAt?.seconds) date = new Date(data.createdAt.seconds * 1000).toISOString().split('T')[0];
-                            } catch (e) { }
-                            if (!date) date = '2000-01-01';
-                        }
-                        return { ...data, entityId: id, date };
-                    });
-            };
-
-            // 4. Fetch Inventory Value (User Scope)
-            let stockVal = 0;
+        if (!isAuthenticated) return;
+        const loadRawData = async () => {
+            setLoading(true);
             try {
-                const prodRef = collection(db, 'users', userId, 'products');
-                const prodSnap = await getDocs(prodRef);
-                prodSnap.docs.forEach(doc => {
-                    const p = doc.data();
-                    stockVal += (Number(p.cp) || 0) * (Number(p.qty) || 0);
-                });
-            } catch (e) { console.error("StockVal Error", e); }
-
-            const [customers, suppliers, expenses] = await Promise.all([
-                listDocs('customers'),
-                listDocs('suppliers'),
-                listDocs('expenses')
-            ]);
-
-            const custLedgers = (await Promise.all(customers.map(c => fetchLedger('customers', c.id)))).flat();
-            const suppLedgers = (await Promise.all(suppliers.map(s => fetchLedger('suppliers', s.id)))).flat();
-            const expLedgers = (await Promise.all(expenses.map(e => fetchLedger('expenses', e.id)))).flat();
-
-            const { start, end } = appliedFilter;
-            // Relaxed isInRange: empty string means open bound
-            const isInRange = (d) => {
-                if (!d) return false;
-                return (!start || d >= start) && (!end || d <= end);
-            };
-
-            // 0. Overall Data (All Time)
-            const allSales = custLedgers.filter(t => t.type === 'sale').reduce((s, t) => s + (Number(t.amount) || 0), 0);
-            const allPurchases = suppLedgers.filter(t => t.type === 'purchase').reduce((s, t) => s + (Number(t.amount) || 0), 0);
-            const allExpenses = expLedgers.reduce((s, t) => s + (Number(t.amount) || 0), 0);
-            const allGrossProfit = custLedgers.filter(t => t.type === 'sale').reduce((s, t) => s + (Number(t.p) || 0), 0);
-
-            // Legacy Fallback for Overall
-            const isGlobalLegacy = allGrossProfit === 0 && allSales > 0;
-            const overallNetProfit = isGlobalLegacy ? (allSales - allPurchases - allExpenses) : (allGrossProfit - allExpenses);
-
-            // 1. Period Data
-            const periodSales = custLedgers.filter(t => t.type === 'sale' && isInRange(t.date));
-            const periodCollections = custLedgers.filter(t => t.type === 'payment' && isInRange(t.date));
-            const periodPurchases = suppLedgers.filter(t => t.type === 'purchase' && isInRange(t.date));
-            const periodExpenses = expLedgers.filter(t => isInRange(t.date));
-
-            const totalSales = periodSales.reduce((s, t) => s + (Number(t.amount) || 0), 0);
-            const totalCollected = periodCollections.reduce((s, t) => s + (Number(t.amount) || 0), 0);
-            const totalPurchases = periodPurchases.reduce((s, t) => s + (Number(t.amount) || 0), 0);
-            const totalExpenses = periodExpenses.reduce((s, t) => s + (Number(t.amount) || 0), 0);
-            const periodGrossProfit = periodSales.reduce((s, t) => s + (Number(t.p) || 0), 0);
-
-            // Legacy Fallback for Period
-            const isPeriodLegacy = periodGrossProfit === 0 && totalSales > 0;
-            const effectiveGrossProfit = isPeriodLegacy ? (totalSales - totalPurchases) : periodGrossProfit;
-            const effectiveNetProfit = effectiveGrossProfit - totalExpenses;
-
-            // 2. Receivables/Payables
-            let totalReceivables = 0;
-            customers.forEach(c => {
-                // Use ALL transactions (Lifetime) for Receivables to match Customer Screen
-                const txs = custLedgers.filter(l => l.entityId === c.id);
-                const s = txs.filter(t => t.type === 'sale').reduce((a, b) => a + Number(b.amount || 0), 0);
-                const p = txs.filter(t => t.type === 'payment').reduce((a, b) => a + Number(b.amount || 0), 0);
-                totalReceivables += (s - p);
-            });
-            let totalPayables = 0;
-            suppliers.forEach(s => {
-                const txs = suppLedgers.filter(l => l.entityId === s.id);
-                const p = txs.filter(t => t.type === 'purchase').reduce((a, b) => a + Number(b.amount || 0), 0);
-                const paid = txs.filter(t => t.type === 'payment').reduce((a, b) => a + Number(b.amount || 0), 0);
-                totalPayables += (p - paid);
-            });
-
-            // 3. Charts
-            const buckets = {};
-            const addToBucket = (dateStr, key, amount, profitVal = 0) => {
-                if (!dateStr) return;
-                const mk = dateStr.substring(0, 7);
-                if (!buckets[mk]) buckets[mk] = { name: mk, sales: 0, profit: 0, expense: 0, purchase: 0 };
-
-                if (key === 'sales') {
-                    buckets[mk].sales += amount;
-                    buckets[mk].profit += profitVal;
-                }
-                if (key === 'expense') {
-                    buckets[mk].expense += amount;
-                    buckets[mk].profit -= amount;
-                }
-                if (key === 'purchase') {
-                    buckets[mk].purchase += amount;
-                    if (isPeriodLegacy) buckets[mk].profit -= amount; // Deduct purchase from profit only in legacy mode
-                }
-            };
-
-            periodSales.forEach(t => {
-                const amt = Number(t.amount) || 0;
-                // If legacy, profit contribution is the Sale Amount (then we deduct purchase later).
-                // If new, profit contribution is 't.p'.
-                const pContrib = isPeriodLegacy ? amt : (Number(t.p) || 0);
-                addToBucket(t.date, 'sales', amt, pContrib);
-            });
-            periodExpenses.forEach(t => addToBucket(t.date, 'expense', Number(t.amount) || 0));
-            periodPurchases.forEach(t => addToBucket(t.date, 'purchase', Number(t.amount) || 0));
-
-            const monthlyData = Object.values(buckets).sort((a, b) => a.name.localeCompare(b.name));
-
-            // 4. Top Entities
-            const customerVolume = {};
-            periodSales.forEach(t => {
-                customerVolume[t.entityId] = (customerVolume[t.entityId] || 0) + (Number(t.amount) || 0);
-            });
-            const topEntities = Object.entries(customerVolume)
-                .map(([id, vol]) => ({
-                    name: customers.find(x => x.id === id)?.name || 'Unknown',
-                    volume: vol,
-                    type: 'Customer'
-                }))
-                .sort((a, b) => b.volume - a.volume).slice(0, 5);
-
-            // 5. Top Products & Margins
-            const productStats = {};
-            const custStats = {};
-
-            periodSales.forEach(t => {
-                // Determine Transaction Profit (Root Level)
-                // If legacy, profit is 0 (or requires full recalc, but we assume p field for new system)
-                const txnProfit = isPeriodLegacy ? 0 : (Number(t.p) || 0);
-                const txnAmount = Number(t.amount) || 0;
-
-                // --- Product Level Stats ---
-                if (t.items && Array.isArray(t.items) && t.items.length > 0) {
-                    // New Multi-Item Logic
-                    t.items.forEach(item => {
-                        const pName = item.n || item.name || 'Unknown'; // 'n' is new key
-                        // Calculate Item stats
-                        const q = Number(item.q) || 0;
-                        const r = Number(item.r) || 0; // rate
-                        const cp = Number(item.cp) || 0; // cost
-
-                        const itemSale = item.total || (q * r);
-                        const itemProfit = (r - cp) * q;
-
-                        if (!productStats[pName]) productStats[pName] = { name: pName, profit: 0, sales: 0 };
-                        productStats[pName].profit += itemProfit;
-                        productStats[pName].sales += itemSale;
+                let stockVal = 0;
+                try {
+                    const prods = await analyticsService.getAllProducts();
+                    prods.forEach(p => {
+                        stockVal += (Number(p.cp) || 0) * (Number(p.qty) || 0);
                     });
-                } else {
-                    // Legacy / Single Item Logic
-                    const pName = t.pN || t.note || 'General Sale';
-                    // Note: 'pN' is defined in new single items too, 'note' is fallback
-                    // Start of 'General Sale' might be too broad if note is used for description.
-                    // But for analytics, it's better than crashing.
+                } catch (e) { console.error("StockVal Error", e); }
+
+                const [customers, suppliers, expenses, custLedgers, suppLedgers, expLedgers] = await Promise.all([
+                    analyticsService.getAllCustomers(),
+                    analyticsService.getAllSuppliers(),
+                    analyticsService.getAllExpenses(),
+                    analyticsService.getAllCustomerLedgers(),
+                    analyticsService.getAllSupplierLedgers(),
+                    analyticsService.getAllExpenseLedgers()
+                ]);
+
+                setRawData({
+                    stockVal, customers, suppliers, expenses, custLedgers, suppLedgers, expLedgers
+                });
+            } catch (error) {
+                console.error("Error fetching analytics raw data:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadRawData();
+    }, [isAuthenticated]);
+
+    const data = useMemo(() => {
+        if (!rawData) return null;
+        
+        const { stockVal, customers, suppliers, custLedgers, suppLedgers, expLedgers } = rawData;
+        const { start, end } = appliedFilter;
+
+        // Relaxed isInRange: empty string means open bound
+        const isInRange = (d) => {
+            if (!d) return false;
+            return (!start || d >= start) && (!end || d <= end);
+        };
+
+        const activeCustomerIds = new Set(customers.map(c => c.id));
+        const activeSupplierIds = new Set(suppliers.map(s => s.id));
+        
+        const activeCustLedgers = custLedgers.filter(t => activeCustomerIds.has(t.entityId || t.customer_id));
+        const activeSuppLedgers = suppLedgers.filter(t => activeSupplierIds.has(t.entityId || t.supplier_id));
+
+        // 0. Overall Data (All Time)
+        const allSales = activeCustLedgers.filter(t => t.type === 'sale').reduce((s, t) => s + (Number(t.amount) || 0), 0);
+        const allPurchases = activeSuppLedgers.filter(t => t.type === 'purchase').reduce((s, t) => s + (Number(t.amount) || 0), 0);
+        const allExpenses = expLedgers.reduce((s, t) => s + (Number(t.amount) || 0), 0);
+        const allGrossProfit = activeCustLedgers.filter(t => t.type === 'sale').reduce((s, t) => s + (Number(t.p) || 0), 0);
+
+        // Legacy Fallback for Overall
+        const isGlobalLegacy = allGrossProfit === 0 && allSales > 0;
+        const overallNetProfit = isGlobalLegacy ? (allSales - allPurchases - allExpenses) : (allGrossProfit - allExpenses);
+
+        // 1. Period Data
+        const periodSales = activeCustLedgers.filter(t => t.type === 'sale' && isInRange(t.date));
+        const periodCollections = activeCustLedgers.filter(t => t.type === 'payment' && isInRange(t.date));
+        const periodPurchases = activeSuppLedgers.filter(t => t.type === 'purchase' && isInRange(t.date));
+        const periodExpenses = expLedgers.filter(t => isInRange(t.date));
+
+        const totalSales = periodSales.reduce((s, t) => s + (Number(t.amount) || 0), 0);
+        const totalCollected = periodCollections.reduce((s, t) => s + (Number(t.amount) || 0), 0);
+        const totalPurchases = periodPurchases.reduce((s, t) => s + (Number(t.amount) || 0), 0);
+        const totalExpenses = periodExpenses.reduce((s, t) => s + (Number(t.amount) || 0), 0);
+        const periodGrossProfit = periodSales.reduce((s, t) => s + (Number(t.p) || 0), 0);
+
+        // Legacy Fallback for Period
+        const isPeriodLegacy = periodGrossProfit === 0 && totalSales > 0;
+        const effectiveGrossProfit = isPeriodLegacy ? (totalSales - totalPurchases) : periodGrossProfit;
+        const effectiveNetProfit = effectiveGrossProfit - totalExpenses;
+
+        // 2. Receivables/Payables
+        let totalReceivables = 0;
+        customers.forEach(c => {
+            // Use ALL transactions (Lifetime) for Receivables to match Customer Screen
+            const txs = activeCustLedgers.filter(l => (l.entityId || l.customer_id) === c.id);
+            const s = txs.filter(t => t.type === 'sale').reduce((a, b) => a + Number(b.amount || 0), 0);
+            const p = txs.filter(t => t.type === 'payment').reduce((a, b) => a + Number(b.amount || 0), 0);
+            totalReceivables += (s - p);
+        });
+        let totalPayables = 0;
+        suppliers.forEach(s => {
+            const txs = activeSuppLedgers.filter(l => (l.entityId || l.supplier_id) === s.id);
+            const p = txs.filter(t => t.type === 'purchase').reduce((a, b) => a + Number(b.amount || 0), 0);
+            const paid = txs.filter(t => t.type === 'payment').reduce((a, b) => a + Number(b.amount || 0), 0);
+            totalPayables += (p - paid);
+        });
+
+        // 3. Charts
+        const buckets = {};
+        const addToBucket = (dateStr, key, amount, profitVal = 0) => {
+            if (!dateStr) return;
+            const mk = dateStr.substring(0, 7);
+            if (!buckets[mk]) buckets[mk] = { name: mk, sales: 0, profit: 0, expense: 0, purchase: 0 };
+
+            if (key === 'sales') {
+                buckets[mk].sales += amount;
+                buckets[mk].profit += profitVal;
+            }
+            if (key === 'expense') {
+                buckets[mk].expense += amount;
+                buckets[mk].profit -= amount;
+            }
+            if (key === 'purchase') {
+                buckets[mk].purchase += amount;
+                if (isPeriodLegacy) buckets[mk].profit -= amount; // Deduct purchase from profit only in legacy mode
+            }
+        };
+
+        periodSales.forEach(t => {
+            const amt = Number(t.amount) || 0;
+            const pContrib = isPeriodLegacy ? amt : (Number(t.p) || 0);
+            addToBucket(t.date, 'sales', amt, pContrib);
+        });
+        periodExpenses.forEach(t => addToBucket(t.date, 'expense', Number(t.amount) || 0));
+        periodPurchases.forEach(t => addToBucket(t.date, 'purchase', Number(t.amount) || 0));
+
+        const monthlyData = Object.values(buckets).sort((a, b) => a.name.localeCompare(b.name));
+
+        // 4. Top Entities
+        const customerVolume = {};
+        periodSales.forEach(t => {
+            const cid = t.entityId || t.customer_id;
+            customerVolume[cid] = (customerVolume[cid] || 0) + (Number(t.amount) || 0);
+        });
+        const topEntities = Object.entries(customerVolume)
+            .map(([id, vol]) => ({
+                name: customers.find(x => x.id === id)?.name || 'Unknown',
+                volume: vol,
+                type: 'Customer'
+            }))
+            .sort((a, b) => b.volume - a.volume).slice(0, 5);
+
+        // 5. Top Products & Margins
+        const productStats = {};
+        const custStats = {};
+
+        periodSales.forEach(t => {
+            const txnProfit = isPeriodLegacy ? 0 : (Number(t.p) || 0);
+            const txnAmount = Number(t.amount) || 0;
+
+            if (t.items && Array.isArray(t.items) && t.items.length > 0) {
+                t.items.forEach(item => {
+                    const pName = item.n || item.name || 'Unknown';
+                    const q = Number(item.q) || 0;
+                    const r = Number(item.r) || 0;
+                    const cp = Number(item.cp) || 0;
+
+                    const itemSale = item.total || (q * r);
+                    const itemProfit = (r - cp) * q;
 
                     if (!productStats[pName]) productStats[pName] = { name: pName, profit: 0, sales: 0 };
-                    productStats[pName].profit += txnProfit;
-                    productStats[pName].sales += txnAmount;
-                }
+                    productStats[pName].profit += itemProfit;
+                    productStats[pName].sales += itemSale;
+                });
+            } else {
+                const pName = t.pN || t.note || 'General Sale';
+                if (!productStats[pName]) productStats[pName] = { name: pName, profit: 0, sales: 0 };
+                productStats[pName].profit += txnProfit;
+                productStats[pName].sales += txnAmount;
+            }
 
-                // --- Customer Level Stats ---
-                const cid = t.entityId;
-                if (!custStats[cid]) custStats[cid] = { id: cid, profit: 0, sales: 0 };
-                custStats[cid].profit += txnProfit;
-                custStats[cid].sales += txnAmount;
-            });
+            const cid = t.entityId || t.customer_id;
+            if (!custStats[cid]) custStats[cid] = { id: cid, profit: 0, sales: 0 };
+            custStats[cid].profit += txnProfit;
+            custStats[cid].sales += txnAmount;
+        });
 
-            const topProducts = Object.values(productStats).sort((a, b) => b.profit - a.profit).slice(0, 5);
-            const topCustomerMargins = Object.values(custStats)
-                .map(s => {
-                    const c = customers.find(x => x.id === s.id);
-                    return {
-                        name: c?.name || 'Unknown',
-                        sales: s.sales,
-                        profit: s.profit,
-                        margin: s.sales > 0 ? (s.profit / s.sales) * 100 : 0
-                    };
-                })
-                .sort((a, b) => b.margin - a.margin).slice(0, 5);
+        const topProducts = Object.values(productStats).sort((a, b) => b.profit - a.profit).slice(0, 5);
+        const topCustomerMargins = Object.values(custStats)
+            .map(s => {
+                const c = customers.find(x => x.id === s.id);
+                return {
+                    name: c?.name || 'Unknown',
+                    sales: s.sales,
+                    profit: s.profit,
+                    margin: s.sales > 0 ? (s.profit / s.sales) * 100 : 0
+                };
+            })
+            .sort((a, b) => b.margin - a.margin).slice(0, 5);
 
-            setData({
-                sales: totalSales,
-                purchases: totalPurchases,
-                collected: totalCollected,
-                expenses: totalExpenses,
-                grossProfit: effectiveGrossProfit,
-                grossProfit: effectiveGrossProfit,
-                netProfit: effectiveNetProfit,
-                totalNetProfit: allSales - allPurchases - allExpenses, // Requested: Lifetime Sales - Lifetime Purchases - Lifetime Expenses
-                receivables: Math.max(0, totalReceivables),
-                payables: Math.max(0, totalPayables),
-                stockValue: stockVal,
-                monthlyData,
-                pieData: [
-                    { name: 'Income', value: totalSales, color: '#4caf50' },
-                    { name: 'Expenses', value: totalExpenses, color: '#f44336' },
-                    { name: isPeriodLegacy ? 'Purchases' : 'COGS', value: isPeriodLegacy ? totalPurchases : (totalSales - effectiveGrossProfit), color: '#90a4ae' }
-                ],
-                topEntities,
-                topProducts,
-                topCustomerMargins,
-                debug: { custCount: customers.length, salesCount: periodSales.length, stockVal }
-            });
+        return {
+            sales: totalSales,
+            purchases: totalPurchases,
+            collected: totalCollected,
+            expenses: totalExpenses,
+            grossProfit: effectiveGrossProfit,
+            netProfit: effectiveNetProfit,
+            totalNetProfit: allSales - allPurchases - allExpenses,
+            receivables: Math.max(0, totalReceivables),
+            payables: Math.max(0, totalPayables),
+            stockValue: stockVal,
+            monthlyData,
+            pieData: [
+                { name: 'Income', value: totalSales, color: '#4caf50' },
+                { name: 'Expenses', value: totalExpenses, color: '#f44336' },
+                { name: isPeriodLegacy ? 'Purchases' : 'COGS', value: isPeriodLegacy ? totalPurchases : (totalSales - effectiveGrossProfit), color: '#90a4ae' }
+            ],
+            topEntities,
+            topProducts,
+            topCustomerMargins,
+            debug: { custCount: customers.length, salesCount: periodSales.length, stockVal }
+        };
+    }, [rawData, appliedFilter]);
 
-        } catch (error) {
-            console.error("Error fetching analytics:", error);
-            // Assuming toast is defined elsewhere or imported
-            // toast.error("Analytics Load Failed: " + error.message);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    if (loading) return (
+    if (loading || !data) return (
         <div style={{ padding: '40px', textAlign: 'center', height: '80vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
-            <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ repeat: Infinity, duration: 1 }}
-                style={{ width: '40px', height: '40px', border: '4px solid #f3f3f3', borderTop: '4px solid #3498db', borderRadius: '50%' }}
+            <style>{`@keyframes cardFadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } @keyframes analyticsSpinRotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+            <div
+                style={{ width: '40px', height: '40px', border: '4px solid #f3f3f3', borderTop: '4px solid #3498db', borderRadius: '50%', animation: 'analyticsSpinRotate 1s linear infinite' }}
             />
             <p style={{ marginTop: '20px', color: '#666' }}>Analyzing...</p>
         </div>
@@ -463,52 +375,7 @@ const Analytics = ({ goBack, user }) => {
                         </button>
                         <h1 style={{ fontSize: isMobile ? '22px' : '28px', fontWeight: 'bold', color: '#1a237e', margin: 0 }}>Business Analytics</h1>
 
-                        <button
-                            onClick={async () => {
-                                const uid = auth.currentUser?.uid;
-                                if (!uid) return alert("No User Logged In");
 
-                                let msg = `User: ${uid}\n---\n`;
-
-                                // 1. Check Product Data Quality
-                                try {
-                                    const pRef = collection(db, 'users', uid, 'products');
-                                    const pSnap = await getDocs(pRef);
-                                    msg += `PRODS: ${pSnap.size}\n`;
-                                    if (!pSnap.empty) {
-                                        const p = pSnap.docs[0].data();
-                                        msg += `Sample: ${p.n} | CP:${p.cp} | Qty:${p.qty}\n`;
-                                    }
-                                } catch (e) { msg += `Prod Err: ${e.message}\n`; }
-
-                                // 2. Check Customer & Ledgers
-                                try {
-                                    const cRef = collection(db, 'users', uid, 'customers');
-                                    const cSnap = await getDocs(cRef);
-                                    msg += `\nCUSTS: ${cSnap.size}\n`;
-
-                                    if (!cSnap.empty) {
-                                        const c = cSnap.docs[0];
-                                        const cid = c.id;
-                                        msg += `ID: ${cid}\n`;
-
-                                        // Check Root Ledger (Expected Live Path)
-                                        const rootLRef = collection(db, 'customers', cid, 'ledger');
-                                        const rootLSnap = await getDocs(rootLRef);
-                                        msg += `Root Ledger: ${rootLSnap.size}\n`;
-
-                                        // Check User Ledger (Migration Path)
-                                        const userLRef = collection(db, 'users', uid, 'customers', cid, 'ledger');
-                                        const userLSnap = await getDocs(userLRef);
-                                        msg += `User Ledger: ${userLSnap.size}\n`;
-                                    }
-                                } catch (e) { msg += `Cust Err: ${e.message}\n`; }
-
-                                alert(msg);
-                            }} style={{ marginLeft: '10px', padding: '5px 10px', fontSize: '10px', background: '#333', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                        >
-                            DIAGNOSE
-                        </button>
                     </div>
 
                     {/* Filter Bar */}

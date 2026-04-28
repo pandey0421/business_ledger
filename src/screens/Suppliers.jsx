@@ -1,11 +1,82 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth } from '../firebase';
-import { collection, addDoc, serverTimestamp, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { supplierService } from '../services/supplierService';
 import SupplierLedger from './SupplierLedger';
 
-function Suppliers({ goBack }) {
+const SupplierForm = React.memo(({ isMobile, editingSupplier, onAdd, onUpdate, onCancel }) => {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+
+  useEffect(() => {
+    if (editingSupplier) {
+      setName(editingSupplier.name);
+      setPhone(editingSupplier.phone);
+    } else {
+      setName('');
+      setPhone('');
+    }
+  }, [editingSupplier]);
+
+  const handleSubmit = () => {
+    if (editingSupplier) onUpdate(editingSupplier.id, name, phone);
+    else onAdd(name, phone);
+  };
+
+  return (
+    <div style={{
+      display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: '16px', background: '#fafafa',
+      padding: isMobile ? '16px' : '24px', borderRadius: '20px', border: '1px solid #f0f0f0',
+      marginBottom: isMobile ? '24px' : '32px', alignItems: 'flex-start'
+    }}>
+      <div style={{ flex: isMobile ? '1 1 100%' : '1 1 220px', minWidth: isMobile ? 'auto' : '220px', width: isMobile ? '100%' : 'auto' }}>
+        <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#455a64', fontSize: '12px' }}>
+          Supplier Name *
+        </label>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Enter supplier name"
+          style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: (editingSupplier && !name.trim()) ? '2px solid #ef5350' : '1px solid #e0e0e0', outline: 'none', fontSize: '14px', boxSizing: 'border-box', fontWeight: '500' }}
+        />
+      </div>
+      <div style={{ flex: isMobile ? '1 1 100%' : '1 1 220px', minWidth: isMobile ? 'auto' : '220px', width: isMobile ? '100%' : 'auto' }}>
+        <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#455a64', fontSize: '12px' }}>
+          Phone (optional)
+        </label>
+        <input
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="Enter phone number"
+          style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1px solid #e0e0e0', outline: 'none', fontSize: '14px', boxSizing: 'border-box', fontWeight: '500' }}
+        />
+      </div>
+      {editingSupplier ? (
+        <>
+          <button
+            onClick={handleSubmit} disabled={!name.trim()}
+            style={{ padding: '12px 24px', borderRadius: '12px', border: 'none', backgroundColor: name.trim() ? '#fb8c00' : '#e0e0e0', color: name.trim() ? '#fff' : '#9e9e9e', cursor: name.trim() ? 'pointer' : 'not-allowed', fontWeight: '600', fontSize: '14px', whiteSpace: 'nowrap', flex: isMobile ? '1 1 100%' : '0 0 auto', height: '46px', alignSelf: 'flex-end', width: isMobile ? '100%' : 'auto' }}
+          >
+            Update
+          </button>
+          <button
+            onClick={onCancel}
+            style={{ padding: '12px 24px', borderRadius: '12px', border: '1px solid #e0e0e0', backgroundColor: 'white', color: '#546e7a', cursor: 'pointer', fontSize: '14px', fontWeight: '600', flex: isMobile ? '1 1 100%' : '0 0 auto', height: '46px', alignSelf: 'flex-end', width: isMobile ? '100%' : 'auto' }}
+          >
+            Cancel
+          </button>
+        </>
+      ) : (
+        <button
+          onClick={handleSubmit} disabled={!name.trim()}
+          style={{ padding: '12px 24px', borderRadius: '12px', border: 'none', backgroundColor: name.trim() ? '#fb8c00' : '#e0e0e0', color: name.trim() ? '#fff' : '#9e9e9e', cursor: name.trim() ? 'pointer' : 'not-allowed', fontWeight: '600', fontSize: '14px', whiteSpace: 'nowrap', flex: isMobile ? '1 1 100%' : '0 0 auto', height: '46px', alignSelf: 'flex-end', boxShadow: name.trim() ? '0 4px 12px rgba(251, 140, 0, 0.2)' : 'none', width: isMobile ? '100%' : 'auto' }}
+        >
+          Add Supplier
+        </button>
+      )}
+    </div>
+  );
+});
+
+function Suppliers({ goBack }) {
   const [message, setMessage] = useState('');
   const [suppliers, setSuppliers] = useState([]);
   const [selectedSupplier, setSelectedSupplier] = useState(null);
@@ -22,63 +93,36 @@ function Suppliers({ goBack }) {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  const userId = auth.currentUser?.uid;
-  const supplierRef = userId ? collection(db, 'users', userId, 'suppliers') : null;
 
   const fetchSuppliers = async () => {
-    if (!supplierRef) return;
-    try {
-      const snapshot = await getDocs(supplierRef);
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), userId }))
-        .filter(d => !d.isDeleted);
-      setSuppliers(data);
-    } catch (err) {
-      console.error(err);
-      setMessage('Failed to load suppliers');
-    }
-  };
-
-  const fetchOverallStats = async () => {
-    if (!supplierRef || !userId) {
-      setLoadingStats(false);
-      return;
-    }
     setLoadingStats(true);
     try {
-      const snapshot = await getDocs(supplierRef);
-      const suppliersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter(d => !d.isDeleted);
+      const snapSuppliers = await supplierService.getSuppliers();
 
-
-      const results = await Promise.all(suppliersData.map(async (supplier) => {
-        // User Scope Path
-        const ledgerRef = collection(db, 'users', userId, 'suppliers', supplier.id, 'ledger');
-        const ledgerSnapshot = await getDocs(ledgerRef);
-        let supplierPurchases = 0;
-        let supplierPayments = 0;
-
-        ledgerSnapshot.docs.forEach(ledgerDoc => {
-          const data = ledgerDoc.data();
-          if (!data.isDeleted) {
-            const val = Number(data.amount) || 0;
-            if (data.type === 'purchase') supplierPurchases += val;
-            if (data.type === 'payment') supplierPayments += val;
-          }
-        });
-        return { purchases: supplierPurchases, payments: supplierPayments };
+      // Use pre-computed totals stored on each supplier record
+      const finalSuppliers = snapSuppliers.map(sData => ({
+        ...sData,
+        purchases: Number(sData.total_purchases) || 0,
+        payments: Number(sData.total_paid) || 0,
+        balance: Number(sData.total_balance) || 0
       }));
 
-      const totalPurchases = results.reduce((acc, curr) => acc + curr.purchases, 0);
-      const totalPayments = results.reduce((acc, curr) => acc + curr.payments, 0);
+      setSuppliers(finalSuppliers);
+
+      // Calculate Overall Stats from pre-computed values
+      const totalPurchases = finalSuppliers.reduce((sum, s) => sum + s.purchases, 0);
+      const totalPayments = finalSuppliers.reduce((sum, s) => sum + s.payments, 0);
 
       setOverallStats({
         totalPurchases: Math.max(0, totalPurchases),
         totalPayments: Math.max(0, totalPayments),
         totalBalance: Math.max(0, totalPurchases - totalPayments),
-        totalSuppliers: suppliersData.length
+        totalSuppliers: finalSuppliers.length
       });
+
     } catch (err) {
-      console.error('Failed to fetch overall stats:', err);
+      console.error(err);
+      setMessage('Failed to load suppliers');
     } finally {
       setLoadingStats(false);
     }
@@ -116,31 +160,15 @@ function Suppliers({ goBack }) {
 
   useEffect(() => {
     fetchSuppliers();
-    fetchOverallStats();
-  }, [userId]);
+  }, []);
 
-  useEffect(() => {
-    if (suppliers.length > 0) fetchOverallStats();
-  }, [suppliers]);
-
-  const handleAddSupplier = async () => {
-    if (!name.trim()) {
-      setMessage('Name is required');
-      return;
-    }
-    if (!supplierRef) {
-      setMessage('No user logged in');
-      return;
-    }
+  const handleAddSupplier = async (newName, newPhone) => {
     try {
-      await addDoc(supplierRef, {
-        name: name.trim(),
-        phone: phone.trim(),
-        createdAt: serverTimestamp()
+      await supplierService.addSupplier({
+        name: newName.trim(),
+        phone: newPhone.trim()
       });
       setMessage('Supplier added successfully');
-      setName('');
-      setPhone('');
       fetchSuppliers();
     } catch (err) {
       console.error(err);
@@ -148,21 +176,14 @@ function Suppliers({ goBack }) {
     }
   };
 
-  const handleUpdateSupplier = async (supplierId) => {
-    if (!editingSupplier || !supplierRef) return;
-    if (!editingSupplier.name.trim()) {
-      setMessage('Name is required');
-      return;
-    }
+  const handleUpdateSupplier = async (supplierId, newName, newPhone) => {
     try {
-      await updateDoc(doc(db, 'users', userId, 'suppliers', supplierId), {
-        name: editingSupplier.name.trim(),
-        phone: editingSupplier.phone.trim()
+      await supplierService.updateSupplier(supplierId, {
+        name: newName.trim(),
+        phone: newPhone.trim()
       });
       setMessage('Supplier updated successfully');
       setEditingSupplier(null);
-      setName('');
-      setPhone('');
       fetchSuppliers();
     } catch (err) {
       console.error(err);
@@ -173,10 +194,7 @@ function Suppliers({ goBack }) {
   const handleDeleteSupplier = async (supplierId) => {
     if (!window.confirm('Are you sure you want to move this supplier to the Recycle Bin?')) return;
     try {
-      await updateDoc(doc(db, 'users', userId, 'suppliers', supplierId), {
-        isDeleted: true,
-        deletedAt: serverTimestamp()
-      });
+      await supplierService.deleteSupplier(supplierId);
       setMessage('Supplier moved to Recycle Bin');
       fetchSuppliers();
     } catch (err) {
@@ -186,9 +204,7 @@ function Suppliers({ goBack }) {
   };
 
   const startEditSupplier = (supplier) => {
-    setEditingSupplier({ ...supplier });
-    setName(supplier.name);
-    setPhone(supplier.phone);
+    setEditingSupplier(supplier);
   };
 
   const formatAmount = (num) => {
@@ -267,7 +283,7 @@ function Suppliers({ goBack }) {
         <div style={{
           marginBottom: isMobile ? '24px' : '32px',
           padding: isMobile ? '20px' : '32px',
-          background: 'white',
+
           borderRadius: '20px',
           border: '1px solid #e0e0e0',
           boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
@@ -320,135 +336,13 @@ function Suppliers({ goBack }) {
         </div>
 
         {/* Add/Edit Form */}
-        <div style={{
-          display: 'flex',
-          gap: isMobile ? '12px' : '16px',
-          flexWrap: 'wrap',
-          marginBottom: isMobile ? '24px' : '32px',
-          flexDirection: isMobile ? 'column' : 'row',
-          backgroundColor: '#fafafa',
-          padding: isMobile ? '16px' : '24px',
-          borderRadius: '20px',
-          border: '1px solid #f0f0f0'
-        }}>
-          <div style={{ flex: isMobile ? '1 1 100%' : '1 1 220px', minWidth: isMobile ? 'auto' : '220px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#455a64', fontSize: '12px' }}>
-              Supplier Name *
-            </label>
-            <input
-              value={editingSupplier ? editingSupplier.name : name}
-              onChange={(e) => {
-                if (editingSupplier) {
-                  setEditingSupplier({ ...editingSupplier, name: e.target.value });
-                } else {
-                  setName(e.target.value);
-                }
-              }}
-              placeholder="Enter supplier name"
-              style={{
-                width: '100%',
-                padding: '12px 16px',
-                borderRadius: '12px',
-                border: editingSupplier && !editingSupplier.name.trim() ? '2px solid #ef5350' : '1px solid #e0e0e0',
-                outline: 'none',
-                fontSize: '14px',
-                boxSizing: 'border-box',
-                fontWeight: '500'
-              }}
-            />
-          </div>
-          <div style={{ flex: isMobile ? '1 1 100%' : '1 1 220px', minWidth: isMobile ? 'auto' : '220px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#455a64', fontSize: '12px' }}>
-              Phone (optional)
-            </label>
-            <input
-              value={editingSupplier ? editingSupplier.phone : phone}
-              onChange={(e) => {
-                if (editingSupplier) {
-                  setEditingSupplier({ ...editingSupplier, phone: e.target.value });
-                } else {
-                  setPhone(e.target.value);
-                }
-              }}
-              placeholder="Enter phone number"
-              style={{
-                width: '100%',
-                padding: '12px 16px',
-                borderRadius: '12px',
-                border: '1px solid #e0e0e0',
-                outline: 'none',
-                fontSize: '14px',
-                boxSizing: 'border-box',
-                fontWeight: '500'
-              }}
-            />
-          </div>
-          {editingSupplier ? (
-            <>
-              <button
-                onClick={() => handleUpdateSupplier(editingSupplier.id)}
-                disabled={!editingSupplier.name.trim()}
-                style={{
-                  padding: '12px 24px',
-                  borderRadius: '12px',
-                  border: 'none',
-                  backgroundColor: editingSupplier.name.trim() ? '#fb8c00' : '#e0e0e0',
-                  color: editingSupplier.name.trim() ? '#fff' : '#9e9e9e',
-                  cursor: editingSupplier.name.trim() ? 'pointer' : 'not-allowed',
-                  fontWeight: '600',
-                  fontSize: '14px',
-                  whiteSpace: 'nowrap',
-                  flex: isMobile ? '1 1 100%' : '0 0 auto',
-                  height: '46px', alignSelf: 'flex-end'
-                }}
-              >
-                Update
-              </button>
-              <button
-                onClick={() => {
-                  setEditingSupplier(null);
-                  setName('');
-                  setPhone('');
-                }}
-                style={{
-                  padding: '12px 24px',
-                  borderRadius: '12px',
-                  border: '1px solid #e0e0e0',
-                  backgroundColor: 'white',
-                  color: '#546e7a',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  flex: isMobile ? '1 1 100%' : '0 0 auto',
-                  height: '46px', alignSelf: 'flex-end'
-                }}
-              >
-                Cancel
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={handleAddSupplier}
-              disabled={!name.trim()}
-              style={{
-                padding: '12px 24px',
-                borderRadius: '12px',
-                border: 'none',
-                backgroundColor: name.trim() ? '#fb8c00' : '#e0e0e0',
-                color: name.trim() ? '#fff' : '#9e9e9e',
-                cursor: name.trim() ? 'pointer' : 'not-allowed',
-                fontWeight: '600',
-                fontSize: '14px',
-                whiteSpace: 'nowrap',
-                flex: isMobile ? '1 1 100%' : '0 0 auto',
-                height: '46px', alignSelf: 'flex-end',
-                boxShadow: name.trim() ? '0 4px 12px rgba(251, 140, 0, 0.2)' : 'none'
-              }}
-            >
-              Add Supplier
-            </button>
-          )}
-        </div>
+        <SupplierForm 
+           isMobile={isMobile}
+           editingSupplier={editingSupplier}
+           onAdd={handleAddSupplier}
+           onUpdate={handleUpdateSupplier}
+           onCancel={() => setEditingSupplier(null)}
+        />
 
         {/* Messages */}
         {message && (

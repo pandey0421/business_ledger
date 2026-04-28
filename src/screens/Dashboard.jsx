@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, Users, ShoppingBag, CreditCard, LogOut, Grid, BarChart2, Trash2, Package } from 'lucide-react';
-import { auth } from '../firebase';
-import { signOut } from 'firebase/auth';
+import { Menu, X, Users, ShoppingBag, CreditCard, LogOut, Grid, BarChart2, Trash2, Package, Download } from 'lucide-react';
+import { backupUserData } from '../utils/excelBackup';
+import { authService } from '../services/authService';
 
 const Dashboard = ({ user, onSelect }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -15,7 +15,7 @@ const Dashboard = ({ user, onSelect }) => {
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      await authService.logout();
       // window.location.reload(); // Handled by auth listener in App.jsx usually
     } catch (error) {
       console.error('Error logging out:', error);
@@ -35,6 +35,24 @@ const Dashboard = ({ user, onSelect }) => {
 
   const handleAnalyticsClick = () => {
     updateScreenAndHash('analytics', 'Analytics');
+  };
+
+  const handleBackup = async () => {
+    if (!user) return;
+    const confirmBackup = window.confirm("Do you want to download a full Excel backup of your data? This may take a few seconds.");
+    if (!confirmBackup) return;
+
+    const toastId = window.alert("Backup started... please wait."); // Using alert as simple blocker or we could use toast if available. 
+    // Actually, toast is better if available, but let's stick to simple feedback first or just button state.
+    // The user has 'react-hot-toast' in dependencies, check imports? No imports in this file. 
+    // I will use simple button text change if possible or just run it.
+
+    try {
+      await backupUserData(user.uid);
+      // Success feedback
+    } catch (e) {
+      window.alert("Backup failed. Please try again.");
+    }
   };
 
   // --- STYLES ---
@@ -373,6 +391,37 @@ const Dashboard = ({ user, onSelect }) => {
               fontWeight: '600', cursor: 'pointer'
             }}>
               View Bin
+            </button>
+          </div>
+
+          {/* Backup Data Card */}
+          <div
+            style={cardStyle}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-5px)';
+              e.currentTarget.style.boxShadow = '0 12px 30px rgba(0,0,0,0.1)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.05)';
+            }}
+            onClick={handleBackup}
+          >
+            <div style={{
+              width: '64px', height: '64px', borderRadius: '50%',
+              background: '#e0f7fa', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', marginBottom: '16px'
+            }}>
+              <Download size={32} color="#006064" />
+            </div>
+            <h3 style={{ margin: '0 0 8px 0', color: '#1a237e', fontSize: '18px' }}>Backup Data</h3>
+            <p style={{ margin: 0, color: '#546e7a', fontSize: '14px' }}>Download Excel file</p>
+            <button style={{
+              marginTop: '16px', padding: '8px 24px', borderRadius: '20px',
+              background: '#00838f', color: 'white', border: 'none',
+              fontWeight: '600', cursor: 'pointer'
+            }}>
+              Download
             </button>
           </div>
         </div>

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, serverTimestamp, onSnapshot, getDocs, doc, updateDoc, query, orderBy, limit, increment, getDoc, getCountFromServer, startAfter, writeBatch } from 'firebase/firestore';
-import { Search, X, Package, ArrowLeft } from 'lucide-react';
-import { db, auth } from '../firebase';
+import { customerService } from '../services/customerService';
+import { inventoryService } from '../services/inventoryService';
 import { exportLedgerToPDF } from '../utils/pdfExport';
 import LedgerPDFTemplate from '../components/LedgerPDFTemplate';
+import { ArrowLeft } from 'lucide-react';
 
 import { useBadDebt } from '../utils/badDebtCalculator';
 
@@ -50,90 +50,56 @@ const CustomerLedger = ({ customer, onBack }) => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // --- Dynamic Path Logic ---
-  const [basePath, setBasePath] = useState(null);
 
-  useEffect(() => {
-    // Determine the correct path for this customer
-    const checkPath = async () => {
-      if (!customer?.id) return;
-      const uid = auth.currentUser?.uid;
 
-      // 1. Prefer User Scope (New Architecture)
-      if (uid) {
-        // We assume we are in the user scope if we are logged in, 
-        // unless this is a legacy shared customer.
-        // For 'Karobar Khata', default to user scope.
-        setBasePath(`users/${uid}/customers/${customer.id}`);
-      } else {
-        // Fallback to legacy root (or wait for auth)
-        setBasePath(`customers/${customer.id}`);
-      }
-    };
-    checkPath();
-  }, [customer?.id]);
-
-  // Listen for Realtime Balance & Totals (Dynamic Path)
-  useEffect(() => {
-    if (!basePath) return;
-    const unsub = onSnapshot(doc(db, basePath), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setRealtimeData({
-          totalBalance: data.totalBalance || 0,
-          totalSales: data.totalSales || 0,
-          totalReceived: data.totalReceived || 0
-        });
-      }
-    });
-    return () => unsub();
-  }, [basePath]);
+  // Remove onSnapshot realtime listener, we update local data on mutations
+  // The display balance will be driven by recalculating locally below
 
   const displayData = userInteractedData || realtimeData;
   const displayBalance = displayData.totalBalance;
 
-  // Initial Fetch (Dynamic Path)
+  // Initial Fetch
   useEffect(() => {
     const initLedger = async () => {
-      if (!basePath) return;
+      if (!customer?.id) return;
       setLoading(true);
       try {
-        const ledgerRef = collection(db, basePath, 'ledger'); // Subcollection
+        const count = await customerService.getCustomerLedgerCount(customer.id);
+        setTotalTransactionCount(count);
 
-        const countSnap = await getCountFromServer(ledgerRef);
-        setTotalTransactionCount(countSnap.data().count);
+        const fetchedEntries = await customerService.getCustomerLedger(customer.id);
 
-        const q = query(ledgerRef, orderBy('date', 'desc'), limit(10));
-        const snap = await getDocs(q);
+        // Let's implement local pagination natively or just slice it
+        setEntries(fetchedEntries.slice(0, 10)); // Just 10 initially
 
-        const fetchedEntries = snap.docs
-          .filter(d => !d.data().isDeleted)
-          .map(d => ({ id: d.id, ...d.data() }));
+        // Also recalculate realtimeData once just to be sure
+        let sales = 0; let received = 0;
+        fetchedEntries.forEach(e => {
+          if (e.type === 'sale') sales += Number(e.amount);
+          if (e.type === 'payment') received += Number(e.amount);
+        });
+        setRealtimeData({
+          totalBalance: sales - received,
+          totalSales: sales,
+          totalReceived: received
+        });
 
-        setEntries(fetchedEntries);
-        setLastVisible(snap.docs[snap.docs.length - 1]);
       } catch (err) {
         console.error("Ledger Load Failed", err);
-        // Fallback: If User Scope failed (maybe legacy data?), try Root?
-        // But for now, let's stick to the primary decision.
       } finally {
         setLoading(false);
       }
     };
     initLedger();
-    initLedger();
-  }, [basePath]);
+  }, [customer?.id]);
 
   // Fetch Inventory for Dropdown (Optimization: Fetch once)
   const [inventoryProducts, setInventoryProducts] = useState([]);
   useEffect(() => {
     const fetchInventory = async () => {
-      if (!auth.currentUser) return;
       try {
-        const pRef = collection(db, 'users', auth.currentUser.uid, 'products');
-        const snap = await getDocs(pRef);
-        const prods = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.n.localeCompare(b.n));
-        setInventoryProducts(prods);
+        const prods = await inventoryService.getMergedProducts();
+        setInventoryProducts(prods.sort((a, b) => a.n.localeCompare(b.n)));
       } catch (e) {
         console.error("Failed to load inventory for dropdown", e);
       }
@@ -142,25 +108,13 @@ const CustomerLedger = ({ customer, onBack }) => {
   }, []);
 
   const fetchMoreEntries = async () => {
-    if (!lastVisible) return;
+    // simplified local pagination since local Dexie fetch is fast anyway
+    if (entries.length >= totalTransactionCount) return;
     setLoadingMore(true);
     try {
-      const q = query(
-        collection(db, basePath, 'ledger'),
-        orderBy('date', 'desc'),
-        startAfter(lastVisible),
-        limit(10)
-      );
-      const snap = await getDocs(q);
-
-      if (!snap.empty) {
-        const newEntries = snap.docs
-          .filter(d => !d.data().isDeleted)
-          .map(d => ({ id: d.id, ...d.data() }));
-
-        setEntries(prev => [...prev, ...newEntries]);
-        setLastVisible(snap.docs[snap.docs.length - 1]);
-      }
+      const allEntries = await customerService.getCustomerLedger(customer.id);
+      const nextBatch = allEntries.slice(entries.length, entries.length + 10);
+      setEntries(prev => [...prev, ...nextBatch]);
     } catch (err) {
       console.error("Error loading more:", err);
     } finally {
@@ -223,18 +177,10 @@ const CustomerLedger = ({ customer, onBack }) => {
         setProdResults([]);
         return;
       }
-      const uid = auth.currentUser?.uid;
-      if (!uid) return;
-
       try {
-        const q = query(
-          collection(db, 'users', uid, 'products'),
-          where('n', '>=', productSearch),
-          where('n', '<=', productSearch + '\uf8ff'),
-          limit(5)
-        );
-        const snap = await getDocs(q);
-        setProdResults(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const allProds = await inventoryService.getProducts();
+        const filtered = allProds.filter(p => p.n.toLowerCase().includes(productSearch.toLowerCase())).slice(0, 5);
+        setProdResults(filtered);
         setShowProdResults(true);
       } catch (e) { console.error(e); }
     };
@@ -280,22 +226,9 @@ const CustomerLedger = ({ customer, onBack }) => {
   };
 
   const addOrUpdateEntry = async () => {
-    if (!basePath) return;
-    const uid = auth.currentUser?.uid;
-    if (!uid) {
-      setMessage('Error: You must be logged in.');
-      return;
-    }
-
-    const batch = writeBatch(db);
-
-    // Ledger Doc
-    const ledgerRef = editingEntry
-      ? doc(db, basePath, 'ledger', editingEntry.id)
-      : doc(collection(db, basePath, 'ledger'));
+    if (!customer?.id) return;
 
     const finalAmount = grandTotal;
-    // ... (Keep profit calc) ...
     const totalProfit = type === 'sale'
       ? cartItems.reduce((acc, i) => acc + ((Number(i.rate) - Number(i.cp || 0)) * Number(i.qty)), 0)
       : 0;
@@ -314,53 +247,77 @@ const CustomerLedger = ({ customer, onBack }) => {
         rate: i.rate,
         cp: i.cp || 0,
         total: i.total
-      })),
-      updatedAt: serverTimestamp()
+      }))
     };
-    if (!editingEntry) entryData.createdAt = serverTimestamp();
-
-    batch.set(ledgerRef, entryData, { merge: true });
-
-    // Customer Totals
-    const custRef = doc(db, basePath);
-    const netBal = type === 'sale' ? finalAmount : -finalAmount;
-    const netSale = type === 'sale' ? finalAmount : 0;
-    const netRecv = type === 'payment' ? finalAmount : 0;
-
-    // We use increment for atomic updates
-    if (!editingEntry) {
-      batch.set(custRef, {
-        totalBalance: increment(netBal),
-        totalSales: increment(netSale),
-        totalReceived: increment(netRecv),
-        lastTransactionDate: date,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-    }
-
-    // Inventory Deduction (Only for New Sales for now)
-    if (!editingEntry && type === 'sale') {
-      cartItems.forEach(item => {
-        if (item.pid) {
-          const prodRef = doc(db, 'users', uid, 'products', item.pid);
-          batch.update(prodRef, {
-            qty: increment(-Number(item.qty))
-          });
-        }
-      });
-    }
 
     try {
-      await batch.commit();
+      let entryId = editingEntry ? editingEntry.id : crypto.randomUUID();
+
+      if (editingEntry) {
+        await customerService.updateLedgerEntry(entryId, entryData);
+      } else {
+        await customerService.addLedgerEntry(customer.id, { id: entryId, ...entryData });
+      }
+
+      // Inventory Deduction (Only for New Sales for now)
+      if (!editingEntry && type === 'sale') {
+        for (const item of cartItems) {
+          if (item.pid) {
+            const prod = await inventoryService.getProductById(item.pid);
+            if (prod) {
+              await inventoryService.updateProduct(item.pid, { ...prod, qty: Number(prod.qty || 0) - Number(item.qty) });
+            }
+          }
+        }
+      }
+
       setMessage('Saved successfully!');
 
-      // Optimistic Update
-      const newEntry = { id: ledgerRef.id, ...entryData };
+      // Pure Optimistic UI Update without re-fetching
+      let calcSales = realtimeData.totalSales;
+      let calcRecv = realtimeData.totalReceived;
+      let newEntries = [...entries];
+      
       if (editingEntry) {
-        setEntries(prev => prev.map(e => e.id === editingEntry.id ? newEntry : e));
+        const oldAmt = Number(editingEntry.amount) || 0;
+        if (editingEntry.type === 'sale') calcSales -= oldAmt;
+        else calcRecv -= oldAmt;
+        
+        const newAmt = Number(entryData.amount) || 0;
+        if (entryData.type === 'sale') calcSales += newAmt;
+        else calcRecv += newAmt;
+        
+        newEntries = newEntries.map(e => e.id === entryId ? {id: entryId, ...entryData} : e);
       } else {
-        setEntries(prev => [newEntry, ...prev]);
+        const newAmt = Number(entryData.amount) || 0;
+        if (entryData.type === 'sale') calcSales += newAmt;
+        else calcRecv += newAmt;
+        
+        newEntries = [{id: entryId, ...entryData}, ...newEntries];
       }
+
+      const calcBalance = calcSales - calcRecv;
+
+      // Update Customer record with new calculated totals
+      await customerService.updateCustomer(customer.id, {
+        total_balance: calcBalance,
+        total_sales: calcSales,
+        total_received: calcRecv,
+        last_transaction_date: date
+      });
+
+      // Keep sorted by date desc locally
+      newEntries.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      // Update Local display state
+      setEntries(newEntries.slice(0, entries.length + (editingEntry ? 0 : 1)));
+      setTotalTransactionCount(prev => prev + (editingEntry ? 0 : 1));
+      setRealtimeData({
+        totalBalance: calcBalance,
+        totalSales: calcSales,
+        totalReceived: calcRecv
+      });
+
       resetForm();
     } catch (e) {
       console.error("Save Error", e);
@@ -510,60 +467,51 @@ const CustomerLedger = ({ customer, onBack }) => {
     const entryToDelete = entries.find(e => e.id === entryId);
     if (!entryToDelete) return;
 
-    const val = Number(entryToDelete.amount);
-    // Reverse logic
-    const netSales = entryToDelete.type === 'sale' ? -val : 0;
-    const netRecv = entryToDelete.type === 'payment' ? -val : 0;
-    const netBal = entryToDelete.type === 'sale' ? -val : val;
-
     try {
-      const batch = writeBatch(db);
+      await customerService.deleteLedgerEntry(customer.id, entryId);
 
-      // 1. Mark as Deleted
-      const ledgerDocRef = doc(db, basePath, 'ledger', entryId);
-      batch.update(ledgerDocRef, {
-        isDeleted: true,
-        deletedAt: serverTimestamp(),
-        parentName: customer.name
-      });
-
-      // 2. Update Customer Totals
-      const customerDocRef = doc(db, basePath);
-      batch.update(customerDocRef, {
-        totalBalance: increment(netBal),
-        totalSales: increment(netSales),
-        totalReceived: increment(netRecv),
-        updatedAt: serverTimestamp()
-      });
-
-      // 3. RESTORE STOCK (If items exist)
+      // RESTORE STOCK (If items exist)
       if (entryToDelete.items && Array.isArray(entryToDelete.items)) {
         for (const item of entryToDelete.items) {
-          if (item.pid) { // pid is product ID
-            const productRef = doc(db, 'users', auth.currentUser.uid, 'products', item.pid);
-            batch.update(productRef, {
-              qty: increment(Number(item.qty) || 0)
-            });
+          if (item.pid) {
+            const prod = await inventoryService.getProductById(item.pid);
+            if (prod) {
+              await inventoryService.updateProduct(item.pid, { ...prod, qty: Number(prod.qty || 0) + Number(item.qty || 0) });
+            }
           }
         }
       } else if (entryToDelete.pid) { // Legacy Single Item
-        const productRef = doc(db, 'users', auth.currentUser.uid, 'products', entryToDelete.pid);
-        batch.update(productRef, {
-          qty: increment(Number(entryToDelete.q) || 0)
-        });
+        const prod = await inventoryService.getProductById(entryToDelete.pid);
+        if (prod) {
+          await inventoryService.updateProduct(entryToDelete.pid, { ...prod, qty: Number(prod.qty || 0) + Number(entryToDelete.q || 0) });
+        }
       }
 
-      await batch.commit();
+      // Recompute Totals Locally
+      const allEntries = await customerService.getCustomerLedger(customer.id);
+      let calcSales = 0; let calcRecv = 0;
+      allEntries.forEach(d => {
+        const amt = Number(d.amount) || 0;
+        if (d.type === 'sale') calcSales += amt;
+        else calcRecv += amt;
+      });
+      const calcBalance = calcSales - calcRecv;
+
+      await customerService.updateCustomer(customer.id, {
+        total_balance: calcBalance,
+        total_sales: calcSales,
+        total_received: calcRecv
+      });
 
       setEntries(prev => prev.filter(e => e.id !== entryId));
-      setTotalTransactionCount(prev => prev - 1);
-      setUserInteractedData({
-        totalBalance: displayData.totalBalance + netBal,
-        totalSales: displayData.totalSales + netSales,
-        totalReceived: displayData.totalReceived + netRecv
+      setTotalTransactionCount(allEntries.length);
+      setRealtimeData({
+        totalBalance: calcBalance,
+        totalSales: calcSales,
+        totalReceived: calcRecv
       });
       setMessage('Entry deleted');
-      setTimeout(() => setUserInteractedData(null), 2000);
+      setTimeout(() => setMessage(''), 2000);
 
     } catch (err) {
       console.error(err);
@@ -578,33 +526,26 @@ const CustomerLedger = ({ customer, onBack }) => {
 
     setMessage('Recalculating totals...');
     try {
-      const q = query(collection(db, basePath, 'ledger'));
-      const snap = await getDocs(q);
+      const allEntries = await customerService.getCustomerLedger(customer.id);
 
       let calcSales = 0;
       let calcRecv = 0;
 
-      snap.docs.forEach(d => {
-        const data = d.data();
-        if (!data.isDeleted) {
-          const amt = Number(data.amount) || 0;
-          if (data.type === 'sale') calcSales += amt;
-          else calcRecv += amt; // Payments
-        }
+      allEntries.forEach(data => {
+        const amt = Number(data.amount) || 0;
+        if (data.type === 'sale') calcSales += amt;
+        else calcRecv += amt;
       });
 
       const calcBalance = calcSales - calcRecv;
 
-      // Update DB
-      await updateDoc(doc(db, basePath), {
-        totalSales: calcSales,
-        totalReceived: calcRecv,
-        totalBalance: calcBalance,
-        updatedAt: serverTimestamp()
+      await customerService.updateCustomer(customer.id, {
+        total_sales: calcSales,
+        total_received: calcRecv,
+        total_balance: calcBalance
       });
 
-      // Update Local State (via realtimeData or force set)
-      setUserInteractedData({
+      setRealtimeData({
         totalSales: calcSales,
         totalReceived: calcRecv,
         totalBalance: calcBalance
@@ -638,18 +579,9 @@ const CustomerLedger = ({ customer, onBack }) => {
       // For now, we will warn if data might be missing or just use what we have.
       // Better approach: fetch specifically for export.
 
-      const q = query(
-        collection(db, basePath, 'ledger'),
-        orderBy('date', 'asc') // PDF needs chronological
-        // No limit here, we want all for the range
-      );
-      // Note: For massive accounts this is heavy, but exporting usually requires all data.
-      const snap = await getDocs(q);
-      const allEntries = snap.docs.map(d => {
-        const da = d.data();
-        if (da.isDeleted) return null;
-        return { id: d.id, ...da, amount: Number(da.amount) || 0 };
-      }).filter(Boolean);
+      const allRaw = await customerService.getCustomerLedger(customer.id);
+      // getCustomerLedger returns DESC (newest first). PDF likely needs ASC (oldest first).
+      const allEntries = allRaw.slice().reverse().map(da => ({ ...da, amount: Number(da.amount) || 0 }));
 
       const filteredEntries = allEntries.filter((entry) => {
         const entryDate = entry.date;
@@ -1008,7 +940,7 @@ const CustomerLedger = ({ customer, onBack }) => {
                         <div>
                           {entry.items.map((i, idx) => (
                             <div key={idx} style={{ fontSize: '13px', color: '#1a237e', marginBottom: '2px' }}>
-                              <b>{i.n}</b> <span style={{ color: '#78909c' }}>({i.q} {i.u} @ {i.r})</span>
+                              <b>{i.n}</b> <span style={{ color: '#78909c' }}>({i.qty || i.q} {i.u} @ {formatAmount(i.rate || i.r)})</span>
                             </div>
                           ))}
                           {entry.note && entry.note !== 'Sale' && <div style={{ fontSize: '12px', color: '#999', marginTop: '4px', fontStyle: 'italic' }}>{entry.note}</div>}

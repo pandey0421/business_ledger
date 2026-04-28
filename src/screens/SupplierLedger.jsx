@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { collection, addDoc, query, orderBy, limit, startAfter, getDocs, getCountFromServer, serverTimestamp, doc, updateDoc, increment, onSnapshot, setDoc } from 'firebase/firestore';
-import { db, auth } from '../firebase';
+import { supplierService } from '../services/supplierService';
 import { exportLedgerToPDF, formatIndianCurrency } from '../utils/pdfExport';
 
 const SupplierLedger = ({ supplier, onBack }) => {
@@ -47,99 +46,77 @@ const SupplierLedger = ({ supplier, onBack }) => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Determine Base Path
-  const basePath = auth.currentUser
-    ? `users/${auth.currentUser.uid}/suppliers/${supplier.id}`
-    : `suppliers/${supplier.id}`;
-
-  // Listen to Supplier Parent for Real-time Balance
-  useEffect(() => {
-    if (!basePath) return;
-    const unsub = onSnapshot(doc(db, basePath), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setRealtimeData({
-          totalBalance: data.totalBalance || 0,
-          totalPurchases: data.totalPurchases || 0,
-          totalPaid: data.totalPaid || 0
-        });
-      }
-    });
-    return () => unsub();
-  }, [basePath]);
-
+  // The realtime listeners are removed and handled natively on mutations
   const displayData = userInteractedData || realtimeData;
   const displayBalance = displayData.totalBalance;
 
   // Initial Fetch
   useEffect(() => {
     const initLedger = async () => {
-      if (!basePath) return;
+      if (!supplier?.id) return;
       setLoading(true);
       try {
-        const ledgerRef = collection(db, basePath, 'ledger');
+        const count = await supplierService.getSupplierLedgerCount(supplier.id);
+        setTotalTransactionCount(count);
 
-        const countSnap = await getCountFromServer(ledgerRef);
-        setTotalTransactionCount(countSnap.data().count);
+        const fetchedEntries = await supplierService.getSupplierLedger(supplier.id);
+        
+        setEntries(fetchedEntries.slice(0, 10));
+        
+        // Recalculate realtimeData once
+        let pur = 0; let paid = 0;
+        fetchedEntries.forEach(e => {
+            const v = Number(e.amount) || 0;
+            if (e.type === 'purchase') pur += v;
+            if (e.type === 'payment') paid += v;
+        });
+        setRealtimeData({
+            totalBalance: pur - paid,
+            totalPurchases: pur,
+            totalPaid: paid
+        });
 
-        const q = query(
-          ledgerRef,
-          orderBy('date', 'desc'),
-          limit(10)
-        );
-
-        const snap = await getDocs(q);
-        const fetchedEntries = snap.docs
-          .filter(d => !d.data().isDeleted)
-          .map(d => ({ id: d.id, ...d.data() }));
-
-        setEntries(fetchedEntries);
-        setLastVisible(snap.docs[snap.docs.length - 1]);
       } catch (err) {
-        console.error("Error fetching ledger:", err);
+        console.error("Ledger Load Failed", err);
       } finally {
         setLoading(false);
       }
     };
     initLedger();
-  }, [basePath]);
+  }, [supplier?.id]);
 
-  // Robust Recalculation Function
   const recalculateTotals = async (isManual = false) => {
-    if (!basePath) return;
-    if (!isManual && (loading || totalTransactionCount === 0)) return;
-    if (!isManual && (realtimeData.totalPurchases > 0 || realtimeData.totalPaid > 0)) return;
-    if (!isManual && userInteractedData) return;
-
+    if (!supplier?.id) return;
     if (isManual) setMessage('Recalculating totals...');
 
     try {
-      const ledgerRef = collection(db, basePath, 'ledger');
-      const snap = await getDocs(ledgerRef);
-      let pur = 0, paid = 0, b = 0;
-      let lastDate = null;
+      const allEntries = await supplierService.getSupplierLedger(supplier.id);
+      let pur = 0, paid = 0;
 
-      snap.docs.forEach(d => {
-        const da = d.data();
-        if (!da.isDeleted) {
-          const v = Number(da.amount) || 0;
-          if (da.type === 'purchase') { pur += v; b += v; }
-          else { paid += v; b -= v; }
-          if (da.date && (!lastDate || da.date > lastDate)) lastDate = da.date;
-        }
+      allEntries.forEach(data => {
+        const amt = Number(data.amount) || 0;
+        if (data.type === 'purchase') pur += amt;
+        else paid += amt;
       });
 
-      const newState = { totalPurchases: pur, totalPaid: paid, totalBalance: b };
-      setUserInteractedData(newState);
+      const b = pur - paid;
 
-      // Save to DB
-      await updateDoc(doc(db, basePath), {
-        ...newState,
-        lastActivityDate: lastDate,
-        updatedAt: serverTimestamp()
+      await supplierService.updateSupplier(supplier.id, {
+        total_purchases: pur,
+        total_paid: paid,
+        total_balance: b
       });
 
-      if (isManual) setMessage('Totals updated successfully');
+      setRealtimeData({
+        totalPurchases: pur,
+        totalPaid: paid,
+        totalBalance: b
+      });
+
+      if (isManual) {
+        setMessage('Totals updated successfully');
+        setTimeout(() => setMessage(''), 3000);
+      }
 
     } catch (err) {
       console.error("Recalculation failed", err);
@@ -147,32 +124,13 @@ const SupplierLedger = ({ supplier, onBack }) => {
     }
   };
 
-  // SELF-HEALING Effect
-  useEffect(() => {
-    const timer = setTimeout(() => recalculateTotals(false), 2000);
-    return () => clearTimeout(timer);
-  }, [basePath, loading, totalTransactionCount, realtimeData, userInteractedData]);
-
   const fetchMoreEntries = async () => {
-    if (!lastVisible) return;
+    if (entries.length >= totalTransactionCount) return;
     setLoadingMore(true);
     try {
-      const q = query(
-        collection(db, basePath, 'ledger'),
-        orderBy('date', 'desc'),
-        startAfter(lastVisible),
-        limit(10)
-      );
-      const snap = await getDocs(q);
-
-      if (!snap.empty) {
-        const newEntries = snap.docs
-          .filter(d => !d.data().isDeleted)
-          .map(d => ({ id: d.id, ...d.data() }));
-
-        setEntries(prev => [...prev, ...newEntries]);
-        setLastVisible(snap.docs[snap.docs.length - 1]);
-      }
+      const allEntries = await supplierService.getSupplierLedger(supplier.id);
+      const nextBatch = allEntries.slice(entries.length, entries.length + 10);
+      setEntries(prev => [...prev, ...nextBatch]);
     } catch (err) {
       console.error("Error loading more:", err);
     } finally {
@@ -232,79 +190,61 @@ const SupplierLedger = ({ supplier, onBack }) => {
     if (isNaN(val)) return;
 
     try {
+      const entryId = editingEntry ? editingEntry.id : crypto.randomUUID();
+      const entryData = { id: entryId, amount: val, type, date, note };
+
       if (editingEntry) {
-        // Deltas
-        const oldVal = Number(editingEntry.amount);
-        const oldType = editingEntry.type;
-
-        // Reverse Old
-        // Old Purchase: Purch -old, Bal -old
-        // Old Pay: Paid -old, Bal +old (Pay reduces bal)
-        const purDelta1 = oldType === 'purchase' ? -oldVal : 0;
-        const paidDelta1 = oldType === 'payment' ? -oldVal : 0;
-        const balDelta1 = oldType === 'purchase' ? -oldVal : oldVal;
-
-        // Apply New
-        const purDelta2 = type === 'purchase' ? val : 0;
-        const paidDelta2 = type === 'payment' ? val : 0;
-        const balDelta2 = type === 'purchase' ? val : -val;
-
-        const netDesc = purDelta1 + purDelta2;
-        const netPaid = paidDelta1 + paidDelta2;
-        const netBal = balDelta1 + balDelta2;
-
-        await updateDoc(doc(db, basePath, 'ledger', editingEntry.id), {
-          amount: val, type, date, note
-        });
-
-        await updateDoc(doc(db, basePath), {
-          totalBalance: increment(netBal),
-          totalPurchases: increment(netDesc),
-          totalPaid: increment(netPaid),
-          updatedAt: serverTimestamp(),
-          lastActivityDate: date
-        });
-
-        // Optimistic
-        setEntries(prev => prev.map(e => e.id === editingEntry.id ? { ...e, amount: val, type, date, note } : e));
-        setUserInteractedData({
-          totalBalance: displayData.totalBalance + netBal,
-          totalPurchases: displayData.totalPurchases + netDesc,
-          totalPaid: displayData.totalPaid + netPaid
-        });
-        setMessage('Entry updated');
-
+        await supplierService.updateLedgerEntry(entryId, entryData);
       } else {
-        // Add
-        const newDocRef = await addDoc(collection(db, basePath, 'ledger'), {
-          amount: val, type, date, note, createdAt: serverTimestamp()
-        });
-
-        const netDesc = type === 'purchase' ? val : 0;
-        const netPaid = type === 'payment' ? val : 0;
-        const netBal = type === 'purchase' ? val : -val;
-
-        await updateDoc(doc(db, basePath), {
-          totalBalance: increment(netBal),
-          totalPurchases: increment(netDesc),
-          totalPaid: increment(netPaid),
-          updatedAt: serverTimestamp(),
-          lastActivityDate: date
-        });
-
-        const newEntry = { id: newDocRef.id, amount: val, type, date, note, createdAt: { seconds: Date.now() / 1000 } };
-        setEntries(prev => [newEntry, ...prev]);
-        setTotalTransactionCount(prev => prev + 1);
-        setUserInteractedData({
-          totalBalance: displayData.totalBalance + netBal,
-          totalPurchases: displayData.totalPurchases + netDesc,
-          totalPaid: displayData.totalPaid + netPaid
-        });
-
-        setMessage('Entry added');
+        await supplierService.addLedgerEntry(supplier.id, entryData);
       }
+
+      // Pure Optimistic UI Update without re-fetching
+      let pur = realtimeData.totalPurchases;
+      let paid = realtimeData.totalPaid;
+      let newEntries = [...entries];
+
+      if (editingEntry) {
+        const oldAmt = Number(editingEntry.amount) || 0;
+        if (editingEntry.type === 'purchase') pur -= oldAmt;
+        else paid -= oldAmt;
+
+        const newAmt = Number(entryData.amount) || 0;
+        if (entryData.type === 'purchase') pur += newAmt;
+        else paid += newAmt;
+
+        newEntries = newEntries.map(e => e.id === entryId ? {id: entryId, ...entryData} : e);
+      } else {
+        const newAmt = Number(entryData.amount) || 0;
+        if (entryData.type === 'purchase') pur += newAmt;
+        else paid += newAmt;
+
+        newEntries = [{id: entryId, ...entryData}, ...newEntries];
+      }
+
+      const b = pur - paid;
+
+      await supplierService.updateSupplier(supplier.id, {
+        total_purchases: pur,
+        total_paid: paid,
+        total_balance: b,
+        last_activity_date: date
+      });
+
+      // Keep sorted by date desc locally
+      newEntries.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      // Optimistic Update
+      setEntries(newEntries.slice(0, entries.length + (editingEntry ? 0 : 1)));
+      setTotalTransactionCount(prev => prev + (editingEntry ? 0 : 1));
+      setRealtimeData({
+        totalPurchases: pur,
+        totalPaid: paid,
+        totalBalance: b
+      });
+
+      setMessage(editingEntry ? 'Entry updated' : 'Entry added');
       resetForm();
-      setTimeout(() => setUserInteractedData(null), 2000);
 
     } catch (err) {
       console.error(err);
@@ -327,35 +267,34 @@ const SupplierLedger = ({ supplier, onBack }) => {
     const entryToDelete = entries.find(e => e.id === entryId);
     if (!entryToDelete) return;
 
-    const val = Number(entryToDelete.amount);
-
-    // Reverse Logic
-    const netDesc = entryToDelete.type === 'purchase' ? -val : 0;
-    const netPaid = entryToDelete.type === 'payment' ? -val : 0;
-    const netBal = entryToDelete.type === 'purchase' ? -val : val;
-
     try {
-      await updateDoc(doc(db, basePath, 'ledger', entryId), {
-        isDeleted: true, deletedAt: serverTimestamp()
-      });
+      await supplierService.deleteLedgerEntry(supplier.id, entryId);
 
-      await updateDoc(doc(db, basePath), {
-        totalBalance: increment(netBal),
-        totalPurchases: increment(netDesc),
-        totalPaid: increment(netPaid),
-        updatedAt: serverTimestamp()
+      // Pure Optimistic UI Update without re-fetching
+      let pur = realtimeData.totalPurchases;
+      let paid = realtimeData.totalPaid;
+      
+      const oldAmt = Number(entryToDelete.amount) || 0;
+      if (entryToDelete.type === 'purchase') pur -= oldAmt;
+      else paid -= oldAmt;
+      
+      const b = pur - paid;
+
+      await supplierService.updateSupplier(supplier.id, {
+        total_purchases: pur,
+        total_paid: paid,
+        total_balance: b
       });
 
       setEntries(prev => prev.filter(e => e.id !== entryId));
       setTotalTransactionCount(prev => prev - 1);
-      setUserInteractedData({
-        totalBalance: displayData.totalBalance + netBal,
-        totalPurchases: displayData.totalPurchases + netDesc,
-        totalPaid: displayData.totalPaid + netPaid
+      setRealtimeData({
+        totalPurchases: pur,
+        totalPaid: paid,
+        totalBalance: b
       });
 
       setMessage('Entry deleted');
-      setTimeout(() => setUserInteractedData(null), 2000);
 
     } catch (err) {
       console.error(err);
@@ -373,16 +312,8 @@ const SupplierLedger = ({ supplier, onBack }) => {
     setMessage('');
 
     try {
-      const q = query(
-        collection(db, basePath, 'ledger'),
-        orderBy('date', 'asc')
-      );
-      const snap = await getDocs(q);
-      const allEntries = snap.docs.map(d => {
-        const da = d.data();
-        if (da.isDeleted) return null;
-        return { id: d.id, ...da, amount: Number(da.amount) || 0 };
-      }).filter(Boolean);
+      const allRaw = await supplierService.getSupplierLedger(supplier.id);
+      const allEntries = allRaw.slice().reverse().map(da => ({ ...da, amount: Number(da.amount) || 0 }));
 
       const filteredEntries = allEntries.filter((entry) => {
         const entryDate = entry.date;
