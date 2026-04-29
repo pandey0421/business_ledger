@@ -72,7 +72,7 @@ export const syncManager = {
 
       try {
           const { supabase } = await import('../supabaseClient');
-          const pendingOps = await db.sync_queue.where('status').equals('pending').toArray();
+          const pendingOps = await db.sync_queue.filter(op => op.status === 'pending' || op.status === 'failed').toArray();
           if (pendingOps.length === 0) return;
 
           console.log(`[SyncManager] Processing ${pendingOps.length} pending operations...`);
@@ -143,6 +143,9 @@ export const syncManager = {
           if (hasUpdates) {
              console.log('[SyncManager] Incremental sync down complete.');
           }
+
+          // Push any pending/failed local mutations up to the server
+          await this.processQueue();
       } catch (err) {
           console.error("Failed to sync down:", err);
       }
