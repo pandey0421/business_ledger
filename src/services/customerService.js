@@ -1,8 +1,9 @@
 import { db, syncManager } from './offlineSync';
+import { supabase } from '../supabaseClient';
 import { authService } from './authService';
 
 export const customerService = {
-   // Query Customers (from local cache)
+   // Read from local Dexie cache (populated by syncDown)
    async getCustomers() {
       const user = (await authService.getCurrentUser()).data.user;
       if (!user) throw new Error("Unauthenticated");
@@ -34,11 +35,11 @@ export const customerService = {
       const user = (await authService.getCurrentUser()).data.user;
       if (!user) throw new Error("Unauthenticated");
 
+      // Fetch full record from cache to merge (prevents null columns)
       const existing = await db.customers.get(id);
-      if (!existing) throw new Error("Customer not found locally");
 
       return await syncManager.pushMutation('customers', 'UPDATE', {
-         ...existing,
+         ...(existing || {}),
          ...data,
          id,
          user_id: user.id,
@@ -50,14 +51,17 @@ export const customerService = {
       const user = (await authService.getCurrentUser()).data.user;
       if (!user) throw new Error("Unauthenticated");
 
+      const existing = await db.customers.get(id);
+
       return await syncManager.pushMutation('customers', 'DELETE', {
+         ...(existing || {}),
          id,
          user_id: user.id,
          updated_at: new Date().toISOString()
       });
    },
 
-   // Ledger Access
+   // Ledger Access — read from Dexie cache
    async getCustomerLedger(customerId) {
       const user = (await authService.getCurrentUser()).data.user;
       if (!user) throw new Error("Unauthenticated");
@@ -68,7 +72,6 @@ export const customerService = {
          .and(entry => !entry.is_deleted && entry.user_id === user.id)
          .toArray();
 
-      // Sort by date desc
       return entries.sort((a, b) => new Date(b.date) - new Date(a.date));
    },
 
@@ -101,10 +104,14 @@ export const customerService = {
       const user = (await authService.getCurrentUser()).data.user;
       if (!user) throw new Error("Unauthenticated");
 
+      // Fetch full record to merge (ensures customer_id is included)
+      const existing = await db.customer_ledger.get(entryId);
+
       return await syncManager.pushMutation('customer_ledger', 'UPDATE', {
+         ...(existing || {}),
+         ...entryData,
          id: entryId,
          user_id: user.id,
-         ...entryData,
          updated_at: new Date().toISOString()
       });
    },
@@ -113,7 +120,10 @@ export const customerService = {
       const user = (await authService.getCurrentUser()).data.user;
       if (!user) throw new Error("Unauthenticated");
 
+      const existing = await db.customer_ledger.get(entryId);
+
       return await syncManager.pushMutation('customer_ledger', 'DELETE', {
+         ...(existing || {}),
          id: entryId,
          customer_id: customerId,
          user_id: user.id,

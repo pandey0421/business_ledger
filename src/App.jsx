@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, lazy, Suspense } from "react";
 import { authService } from "./services/authService";
 import { syncManager } from "./services/offlineSync";
-import { supabase } from "./supabaseClient";
+// supabase client is used through services, not directly here
 import { Toaster, toast } from 'react-hot-toast';
 import { App as CapacitorApp } from '@capacitor/app';
 
