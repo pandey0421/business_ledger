@@ -79,16 +79,21 @@ export const syncManager = {
 
           for (const op of pendingOps) {
               try {
-                  let result;
-
-                  if (op.operation === 'INSERT') {
-                      result = await supabase.from(op.table).upsert(op.payload, { onConflict: 'id' });
-                  } else if (op.operation === 'UPDATE') {
-                      result = await supabase.from(op.table).upsert(op.payload, { onConflict: 'id' });
-                  } else if (op.operation === 'DELETE') {
-                      // Soft delete: update the is_deleted flag remotely
-                      result = await supabase.from(op.table).upsert(op.payload, { onConflict: 'id' });
+                  // Always merge the queue payload with the full local record
+                  // This ensures required columns (like customer_id) are never missing
+                  let fullPayload = { ...op.payload };
+                  if (op.payload.id && db[op.table]) {
+                      try {
+                          const localRecord = await db[op.table].get(op.payload.id);
+                          if (localRecord) {
+                              fullPayload = { ...localRecord, ...op.payload };
+                          }
+                      } catch (e) {
+                          // If local record not found, proceed with queue payload
+                      }
                   }
+
+                  const result = await supabase.from(op.table).upsert(fullPayload, { onConflict: 'id' });
 
                   if (result?.error) {
                       console.error(`[SyncManager] Failed to sync op ${op.id} (${op.table}/${op.operation}):`, result.error);
