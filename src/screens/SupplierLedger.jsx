@@ -190,8 +190,22 @@ const SupplierLedger = ({ supplier, onBack }) => {
     if (isNaN(val)) return;
 
     try {
+      let pur = realtimeData.totalPurchases;
+      let paid = realtimeData.totalPaid;
+
+      if (editingEntry) {
+        const oldAmt = Number(editingEntry.amount) || 0;
+        if (editingEntry.type === 'purchase') pur -= oldAmt;
+        else paid -= oldAmt;
+      }
+
+      if (type === 'purchase') pur += val;
+      else paid += val;
+
+      const b = pur - paid;
+
       const entryId = editingEntry ? editingEntry.id : crypto.randomUUID();
-      const entryData = { id: entryId, amount: val, type, date, note };
+      const entryData = { id: entryId, amount: val, type, date, note, running_balance: b };
 
       if (editingEntry) {
         await supplierService.updateLedgerEntry(entryId, entryData);
@@ -199,36 +213,18 @@ const SupplierLedger = ({ supplier, onBack }) => {
         await supplierService.addLedgerEntry(supplier.id, entryData);
       }
 
-      // Pure Optimistic UI Update without re-fetching
-      let pur = realtimeData.totalPurchases;
-      let paid = realtimeData.totalPaid;
       let newEntries = [...entries];
 
       if (editingEntry) {
-        const oldAmt = Number(editingEntry.amount) || 0;
-        if (editingEntry.type === 'purchase') pur -= oldAmt;
-        else paid -= oldAmt;
-
-        const newAmt = Number(entryData.amount) || 0;
-        if (entryData.type === 'purchase') pur += newAmt;
-        else paid += newAmt;
-
         newEntries = newEntries.map(e => e.id === entryId ? {id: entryId, ...entryData} : e);
       } else {
-        const newAmt = Number(entryData.amount) || 0;
-        if (entryData.type === 'purchase') pur += newAmt;
-        else paid += newAmt;
-
         newEntries = [{id: entryId, ...entryData}, ...newEntries];
       }
-
-      const b = pur - paid;
 
       await supplierService.updateSupplier(supplier.id, {
         total_purchases: pur,
         total_paid: paid,
-        total_balance: b,
-        last_activity_date: date
+        total_balance: b
       });
 
       // Keep sorted by date desc locally
@@ -248,7 +244,7 @@ const SupplierLedger = ({ supplier, onBack }) => {
 
     } catch (err) {
       console.error(err);
-      setMessage('Failed to process entry');
+      setMessage('Failed to process entry: ' + (err.message || ''));
     }
   };
 
@@ -298,7 +294,7 @@ const SupplierLedger = ({ supplier, onBack }) => {
 
     } catch (err) {
       console.error(err);
-      setMessage('Failed to delete entry');
+      setMessage('Failed to delete entry: ' + (err.message || ''));
     }
   };
 
