@@ -43,11 +43,20 @@ export const analyticsService = {
      const user = (await authService.getCurrentUser()).data.user;
      if (!user) return [];
      
-     return await db.products
+     const rawProds = await db.products
          .where('user_id')
          .equals(user.id)
          .and(p => !p.is_deleted)
          .toArray();
+         
+     return rawProds.map(p => ({
+         ...p,
+         n: p.name || p.n,
+         u: p.unit || p.u,
+         cp: p.cost_price ?? p.cp,
+         sp: p.selling_price ?? p.sp,
+         qty: p.quantity ?? p.qty
+     }));
   },
 
   // Get all customers for customer stats

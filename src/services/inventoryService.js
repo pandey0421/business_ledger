@@ -6,12 +6,21 @@ export const inventoryService = {
      const user = (await authService.getCurrentUser()).data.user;
      if (!user) throw new Error("Unauthenticated");
 
-     return await db.products
+     const raw = await db.products
          .where('user_id')
          .equals(user.id)
          .and(p => !p.is_deleted)
          .reverse()
          .sortBy('created_at');
+         
+     return raw.map(p => ({
+         ...p,
+         n: p.name || p.n,
+         u: p.unit || p.u,
+         cp: p.cost_price ?? p.cp,
+         sp: p.selling_price ?? p.sp,
+         qty: p.quantity ?? p.qty
+     }));
   },
 
   async getMergedProducts() {
@@ -59,7 +68,16 @@ export const inventoryService = {
      const user = (await authService.getCurrentUser()).data.user;
      if (!user) throw new Error("Unauthenticated");
 
-     return await db.products.get(id);
+     const p = await db.products.get(id);
+     if (!p) return null;
+     return {
+         ...p,
+         n: p.name || p.n,
+         u: p.unit || p.u,
+         cp: p.cost_price ?? p.cp,
+         sp: p.selling_price ?? p.sp,
+         qty: p.quantity ?? p.qty
+     };
   },
 
   async addProduct(productData) {
@@ -67,7 +85,11 @@ export const inventoryService = {
      if (!user) throw new Error("Unauthenticated");
 
      return await syncManager.pushMutation('products', 'INSERT', {
-        ...productData,
+        name: productData.n || productData.name,
+        unit: productData.u || productData.unit,
+        cost_price: Number(productData.cp ?? productData.cost_price ?? 0),
+        selling_price: Number(productData.sp ?? productData.selling_price ?? 0),
+        quantity: Number(productData.qty ?? productData.quantity ?? 0),
         user_id: user.id,
         is_deleted: false,
         created_at: new Date().toISOString(),
@@ -81,13 +103,20 @@ export const inventoryService = {
 
      const existing = await db.products.get(id);
 
-     return await syncManager.pushMutation('products', 'UPDATE', {
+     const updatePayload = {
         ...(existing || {}),
-        ...data,
         id,
         user_id: user.id,
         updated_at: new Date().toISOString()
-     });
+     };
+     
+     if (data.n !== undefined || data.name !== undefined) updatePayload.name = data.n || data.name;
+     if (data.u !== undefined || data.unit !== undefined) updatePayload.unit = data.u || data.unit;
+     if (data.cp !== undefined || data.cost_price !== undefined) updatePayload.cost_price = Number(data.cp ?? data.cost_price);
+     if (data.sp !== undefined || data.selling_price !== undefined) updatePayload.selling_price = Number(data.sp ?? data.selling_price);
+     if (data.qty !== undefined || data.quantity !== undefined) updatePayload.quantity = Number(data.qty ?? data.quantity);
+
+     return await syncManager.pushMutation('products', 'UPDATE', updatePayload);
   },
 
   async deleteProduct(id) {

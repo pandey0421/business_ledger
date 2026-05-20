@@ -197,6 +197,25 @@ function App() {
       <p style={{ color: '#607d8b', fontFamily: 'sans-serif' }}>
         Loading Karobar Khata...
       </p>
+      <button 
+        onClick={() => setLoading(false)}
+        style={{
+          marginTop: '20px',
+          padding: '8px 24px',
+          background: 'transparent',
+          border: '1px solid #cfd8dc',
+          color: '#607d8b',
+          borderRadius: '20px',
+          cursor: 'pointer',
+          fontSize: '14px',
+          fontFamily: 'sans-serif',
+          transition: 'all 0.2s'
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f5f5'; e.currentTarget.style.color = '#37474f'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#607d8b'; }}
+      >
+        Skip Loading
+      </button>
     </div>
   );
 
