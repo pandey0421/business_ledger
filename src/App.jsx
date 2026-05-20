@@ -189,7 +189,7 @@ function App() {
       display: 'flex',
       justifyContent: 'center',
       alignItems: 'center',
-      height: '100vh',
+      height: '100dvh',
       flexDirection: 'column',
       gap: '20px'
     }}>
@@ -323,7 +323,7 @@ function App() {
       <Toaster position="top-right" />
 
       <div
-        style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}
+        style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}
       >
         {user && <BrandingHeader />}
         <main id="main-content" style={{ flex: 1 }}>

@@ -178,7 +178,7 @@ const BackupRestore = ({ goBack }) => {
     return (
         <div style={{
             padding: '40px', maxWidth: '800px', margin: '0 auto', fontFamily: "'Inter', sans-serif",
-            backgroundColor: '#f5f7fa', minHeight: '100vh'
+            backgroundColor: '#f5f7fa', minHeight: '100dvh'
         }}>
             <button onClick={goBack} style={{ marginBottom: '20px', cursor: 'pointer', border: 'none', background: 'transparent', fontSize: '16px', color: '#555' }}>
                 ← Back

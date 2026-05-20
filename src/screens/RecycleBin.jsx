@@ -218,7 +218,7 @@ const RecycleBin = ({ goBack }) => {
 
     return (
         <div style={{
-            minHeight: '100vh',
+            minHeight: '100dvh',
             background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
             display: 'flex', flexDirection: 'column', width: '100%',
             padding: isMobile ? '10px' : '32px', boxSizing: 'border-box', fontFamily: "'Inter', sans-serif"

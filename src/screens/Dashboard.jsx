@@ -108,12 +108,12 @@ const Dashboard = ({ user, onSelect }) => {
   };
 
   // user prop is required, but if missing, we can just show a placeholder or nothing
-  if (!user) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading user data...</div>;
+  if (!user) return <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading user data...</div>;
 
   return (
     <div style={{
       background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
-      minHeight: '100vh',
+      minHeight: '100dvh',
       width: '100%',
       maxWidth: '100%',
       overflowX: 'hidden',

@@ -78,9 +78,10 @@ const Landing = ({ onGetStarted }) => {
             maxWidth: '1200px',
             margin: '0 auto',
             display: 'grid',
-            gridTemplateColumns: isMobile ? '1fr' : '1.2fr 1fr',
-            gap: '60px',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 350px), 1fr))',
+            gap: 'clamp(40px, 6vw, 60px)',
             alignItems: 'center',
+            justifyContent: 'center',
             zIndex: 2,
             position: 'relative'
         },
@@ -97,7 +98,7 @@ const Landing = ({ onGetStarted }) => {
             boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
         },
         heroTitle: {
-            fontSize: isMobile ? '42px' : '72px',
+            fontSize: 'clamp(42px, 6vw, 72px)',
             fontWeight: '800',
             marginBottom: '24px',
             lineHeight: 1.1,
@@ -109,7 +110,7 @@ const Landing = ({ onGetStarted }) => {
             textShadow: '0 10px 30px rgba(0,0,0,0.2)'
         },
         heroDesc: {
-            fontSize: isMobile ? '18px' : '22px',
+            fontSize: 'clamp(18px, 2.5vw, 22px)',
             lineHeight: 1.6,
             opacity: 0.9,
             marginBottom: '48px',
@@ -133,8 +134,9 @@ const Landing = ({ onGetStarted }) => {
             gap: '12px'
         },
         mockPhone: {
-            width: '300px',
-            height: '620px',
+            width: '100%',
+            maxWidth: '300px',
+            aspectRatio: '300 / 620',
             background: '#111',
             borderRadius: '45px',
             border: '12px solid #333',
@@ -142,7 +144,8 @@ const Landing = ({ onGetStarted }) => {
             overflow: 'hidden',
             boxShadow: '0 50px 100px -20px rgba(0, 0, 0, 0.5)',
             transform: isMobile ? 'none' : 'rotate(-6deg) translateY(30px)',
-            transition: 'transform 1s ease-out'
+            transition: 'transform 1s ease-out',
+            margin: '0 auto'
         },
         section: {
             padding: '100px 20px',
@@ -150,10 +153,11 @@ const Landing = ({ onGetStarted }) => {
         },
         featureRow: {
             display: 'flex',
-            flexDirection: isMobile ? 'column' : 'row',
+            flexDirection: 'row',
+            flexWrap: 'wrap',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: isMobile ? '60px' : '100px',
+            gap: 'clamp(40px, 8vw, 100px)',
             maxWidth: '1200px',
             margin: '0 auto 120px'
         }
@@ -164,26 +168,27 @@ const Landing = ({ onGetStarted }) => {
         const slide = mobileSlides[currentSlide];
         return (
             <div style={{
-                height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column',
+                position: 'fixed', top: 0, bottom: 0, left: 0, right: 0, display: 'flex', flexDirection: 'column',
                 background: slide.type === 'hero' ? 'linear-gradient(135deg, #311b92 0%, #6200ea 100%)' : '#ffffff',
                 color: slide.type === 'hero' ? 'white' : '#333',
-                position: 'fixed', top: 0, left: 0, overflow: 'hidden'
+                overflow: 'hidden'
             }}>
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 24px', textAlign: 'center' }}>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', textAlign: 'center', overflowY: 'auto' }}>
 
-                    <div style={{ marginBottom: '40px' }}>
+                    <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'center', width: '100%' }}>
                         {(slide.type === 'hero' || slide.type === 'cta') ? (
                             <div style={{
-                                width: '120px', height: '120px', background: 'white', borderRadius: '50%',
+                                width: '100px', height: '100px', background: 'white', borderRadius: '50%',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 boxShadow: '0 10px 30px rgba(0,0,0,0.2)', margin: '0 auto'
                             }}>
-                                <img src="/favicon.ico" alt="Logo" style={{ width: '80px', height: '80px', objectFit: 'contain' }} />
+                                <img src="/favicon.ico" alt="Logo" style={{ width: '60px', height: '60px', objectFit: 'contain' }} />
                             </div>
                         ) : (
                             <div style={{
-                                width: '220px', height: '440px', background: '#111', borderRadius: '30px', border: '8px solid #333',
-                                overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
+                                width: '100%', maxWidth: '240px', height: '45vh', maxHeight: '420px', minHeight: '280px',
+                                background: '#111', borderRadius: '24px', border: '6px solid #333',
+                                overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.2)', margin: '0 auto'
                             }}>
                                 <img src={slide.image} alt={slide.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => e.target.style.display = 'none'} />
                             </div>

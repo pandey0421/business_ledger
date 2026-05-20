@@ -735,7 +735,7 @@ const CustomerLedger = ({ customer, onBack }) => {
   );
 
   return (
-    <div style={{ padding: '0px', minHeight: '100vh', background: '#f5f7fa', fontFamily: "'Inter', sans-serif" }}>
+    <div style={{ padding: '0px', minHeight: '100dvh', background: '#f5f7fa', fontFamily: "'Inter', sans-serif" }}>
       {/* ... Header (kept same) ... */}
       <div style={{
         background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)',

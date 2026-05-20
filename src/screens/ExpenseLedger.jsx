@@ -305,11 +305,11 @@ const ExpenseLedger = ({ expense, onBack }) => {
 
   return (
     <div style={{
-      minHeight: '100vh',
+      minHeight: '100dvh',
       background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
       display: 'flex',
       flexDirection: 'column',
-      width: '100vw',
+      width: '100%',
       margin: 0,
       padding: isMobile ? '0px 12px' : '24px',
       overflowX: 'hidden',
@@ -317,7 +317,7 @@ const ExpenseLedger = ({ expense, onBack }) => {
       fontFamily: "'Inter', sans-serif"
     }}>
       <div style={{
-        maxWidth: isMobile ? '100vw' : '1200px',
+        maxWidth: isMobile ? '100%' : '1200px',
         margin: isMobile ? '0' : '0 auto',
         width: '100%',
         backgroundColor: '#ffffff',

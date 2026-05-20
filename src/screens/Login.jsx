@@ -200,14 +200,14 @@ const Login = ({ onSuccess }) => {
   return (
     <div
       style={{
-        minHeight: '100vh',
+        minHeight: '100dvh',
         background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         padding: isMobile ? '16px' : '32px',
         margin: 0,
-        width: '100vw',
+        width: '100%',
         overflowX: 'hidden',
         boxSizing: 'border-box',
         fontFamily: "'Inter', sans-serif"

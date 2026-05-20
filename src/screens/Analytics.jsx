@@ -353,12 +353,12 @@ const Analytics = ({ goBack, user }) => {
 
     return (
         <div style={{
-            minHeight: '100vh',
+            minHeight: '100dvh',
             background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
             padding: isMobile ? '12px' : '24px',
             fontFamily: "'Inter', sans-serif",
             overflowX: 'hidden',
-            width: '100vw',
+            width: '100%',
             boxSizing: 'border-box'
         }}>
             <div style={{ maxWidth: '1400px', margin: '0 auto' }}>

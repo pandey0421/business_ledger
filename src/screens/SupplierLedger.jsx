@@ -375,13 +375,13 @@ const SupplierLedger = ({ supplier, onBack }) => {
 
   return (
     <div style={{
-      minHeight: '100vh',
+      minHeight: '100dvh',
       background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
-      display: 'flex', flexDirection: 'column', width: '100vw', margin: 0,
+      display: 'flex', flexDirection: 'column', width: '100%', margin: 0,
       padding: isMobile ? '0px 12px' : '24px', overflowX: 'hidden', boxSizing: 'border-box', fontFamily: "'Inter', sans-serif"
     }}>
       <div style={{
-        maxWidth: isMobile ? '100vw' : '1200px', margin: isMobile ? '0' : '0 auto', width: '100%',
+        maxWidth: isMobile ? '100%' : '1200px', margin: isMobile ? '0' : '0 auto', width: '100%',
         backgroundColor: '#ffffff', borderRadius: isMobile ? '0' : '24px', padding: isMobile ? '16px' : '32px',
         boxShadow: isMobile ? 'none' : '0 4px 20px rgba(0,0,0,0.05)', border: isMobile ? 'none' : '1px solid #f0f0f0', boxSizing: 'border-box'
       }}>

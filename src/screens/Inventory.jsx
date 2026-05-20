@@ -159,7 +159,7 @@ function Inventory({ goBack, user }) {
     // Styles for Glassmorphism and Premium feel
     const styles = {
         container: {
-            minHeight: '100vh',
+            minHeight: '100dvh',
             background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)', // Deep dark blue premium theme
             color: '#fff',
             padding: isMobile ? '16px' : '40px',

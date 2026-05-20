@@ -173,7 +173,7 @@ const DataMigration = ({ goBack }) => {
     return (
         <div style={{
             padding: '40px', maxWidth: '800px', margin: '0 auto', fontFamily: "'Inter', sans-serif",
-            position: 'relative', zIndex: 9999, backgroundColor: '#f5f7fa', minHeight: '100vh',
+            position: 'relative', zIndex: 9999, backgroundColor: '#f5f7fa', minHeight: '100dvh',
             top: 0, left: 0
         }}>
             <button onClick={goBack} style={{ marginBottom: '20px', cursor: 'pointer', border: 'none', background: 'transparent', fontSize: '16px', color: '#555' }}>
